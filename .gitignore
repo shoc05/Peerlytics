@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+backend/node_modules/
+
+# Build output
+dist/
+build/
+
+# Environment / secrets — never commit (contains live API keys)
+.env
+.env.*
+!.env.example
+
+# Firebase Admin service-account key (used by the deadline-reminder cron) — NEVER commit
+serviceAccountKey.json
+backend/serviceAccountKey.json
+**/serviceAccount*.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

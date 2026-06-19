@@ -1,0 +1,8 @@
+# Normalize line endings so Windows/macOS/Linux collaborators don't churn the whole file.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary

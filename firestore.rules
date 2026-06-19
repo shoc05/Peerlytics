@@ -1,0 +1,261 @@
+  rules_version = '2';
+  service cloud.firestore {
+    match /databases/{database}/documents {
+      function signedIn() {
+        return request.auth != null;
+      }
+
+      function userDoc() {
+        return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      }
+
+      function isLecturer() {
+        return signedIn() &&
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          userDoc().role == 'lecturer';
+      }
+
+      function isStudent() {
+        return signedIn() &&
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          userDoc().role == 'student';
+      }
+
+      // Admins (role set manually in Firestore) get read-only oversight of grading across all
+      // groups — they audit how lecturers grade/override, but never write grades or content.
+      function isAdmin() {
+        return signedIn() &&
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          userDoc().role == 'admin';
+      }
+
+      function groupData(groupId) {
+        return get(/databases/$(database)/documents/groups/$(groupId)).data;
+      }
+
+      function isMemberOfGroup(groupId) {
+        let g = groupData(groupId);
+        return g != null &&
+          (request.auth.uid in g.memberIds || request.auth.uid in g.lecturerIds);
+      }
+
+      function isLecturerOfGroup(groupId) {
+        let g = groupData(groupId);
+        return g != null && request.auth.uid in g.lecturerIds;
+      }
+
+      // True when a student has submitted work to this lecturer on this group.
+      // createWorkspaceSubmission() adds the lecturer uid via arrayUnion(submittedToLecturers).
+      function submissionUnlockedForLecturer(groupId) {
+        let g = groupData(groupId);
+        return g != null &&
+          isLecturer() &&
+          g.lecturerIds != null &&
+          request.auth.uid in g.lecturerIds &&
+          g.submittedToLecturers != null &&
+          request.auth.uid in g.submittedToLecturers;
+      }
+
+      // Students: full workspace access. Lecturers: only after submission unlock.
+      function canReadWorkspaceContent(groupId) {
+        let g = groupData(groupId);
+        return g != null && (
+          (g.memberIds != null && request.auth.uid in g.memberIds && !isLecturer()) ||
+          submissionUnlockedForLecturer(groupId)
+        );
+      }
+
+      function canReadGroupReport(groupId) {
+        return !isLecturer() || submissionUnlockedForLecturer(groupId);
+      }
+
+      // ——— Users (profiles) ———
+      match /users/{userId} {
+        allow read: if signedIn();
+        allow create: if signedIn() && request.auth.uid == userId;
+        // Own updates unrestricted. Any signed-in user may set only the groupId field,
+        // and only to a group they are themselves a member/lecturer of — this is the
+        // invite flow (addGroupMember sets the invited user's groupId pointer; the inviter
+        // is always an existing member of that group).
+        allow update: if signedIn() && (
+          request.auth.uid == userId ||
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['groupId']) &&
+            isMemberOfGroup(request.resource.data.groupId)
+          )
+        );
+        allow delete: if false;
+
+        match /notifications/{notificationId} {
+          allow read, update: if signedIn() && request.auth.uid == userId;
+          allow create: if signedIn();
+          // The owner may dismiss (delete) their own notifications.
+          allow delete: if signedIn() && request.auth.uid == userId;
+        }
+      }
+
+      // ——— Projects / Groups ———
+      // Use resource.data directly for the group document read — avoids a circular
+      // get() call on the same document that isMemberOfGroup() would produce,
+      // which silently breaks onSnapshot list queries (Bugs 2 & 3).
+      match /groups/{groupId} {
+        allow read: if signedIn() && (
+          request.auth.uid in resource.data.memberIds ||
+          request.auth.uid in resource.data.lecturerIds ||
+          isAdmin()
+        );
+        allow create: if signedIn();
+        // Members may update freely. Additionally, any signed-in user (a lecturer who
+        // received a submission to their email) may add THEMSELVES to lecturerIds and/or
+        // submittedToLecturers — this is how a targeted lecturer becomes a group member
+        // so their reads of reports/analytics pass. They can only add their own uid.
+        allow update: if signedIn() && (
+          isMemberOfGroup(groupId) ||
+          (
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['lecturerIds', 'submittedToLecturers']) &&
+            request.auth.uid in request.resource.data.lecturerIds
+          )
+        );
+        // Use resource.data directly to avoid a circular get() on the same doc being deleted.
+        // Any member (student or lecturer) may delete the workspace.
+        allow delete: if signedIn() && (
+          request.auth.uid in resource.data.memberIds ||
+          request.auth.uid in resource.data.lecturerIds
+        );
+
+        match /folders/{folderId} {
+          allow read: if canReadWorkspaceContent(groupId);
+          allow create, update, delete: if isMemberOfGroup(groupId) && !isLecturer();
+        }
+
+        match /files/{fileId} {
+          allow read: if canReadWorkspaceContent(groupId);
+          allow create, update: if isMemberOfGroup(groupId) && !isLecturer();
+          allow delete: if isMemberOfGroup(groupId) && !isLecturer();
+        }
+
+        match /versions/{versionId} {
+          allow read: if canReadWorkspaceContent(groupId);
+          allow create, update: if isMemberOfGroup(groupId) && !isLecturer();
+          allow delete: if false;
+        }
+
+        match /activity/{activityId} {
+          allow read: if canReadWorkspaceContent(groupId);
+          allow create, update: if isMemberOfGroup(groupId) && !isLecturer();
+          allow delete: if isLecturerOfGroup(groupId);
+        }
+
+        match /pasteEvents/{eventId} {
+          // Student members may read their workspace's paste events (needed so the submit
+          // flow can attach them to the report); lecturers read after submission unlock.
+          allow read: if (isMemberOfGroup(groupId) && !isLecturer()) ||
+            (canReadWorkspaceContent(groupId) && isLecturerOfGroup(groupId));
+          allow create: if isMemberOfGroup(groupId) && !isLecturer();
+          allow update, delete: if false;
+        }
+
+        match /grades/{gradeId} {
+          allow read: if isAdmin() ||
+            (isMemberOfGroup(groupId) && (canReadWorkspaceContent(groupId) || !isLecturer()));
+          allow write: if isLecturerOfGroup(groupId) && submissionUnlockedForLecturer(groupId);
+        }
+
+        match /notifications/{notificationId} {
+          allow read: if isMemberOfGroup(groupId);
+          allow create: if isMemberOfGroup(groupId);
+          allow update: if isMemberOfGroup(groupId);
+          // A lecturer of the group, or the recipient the notification targets, may delete it.
+          allow delete: if isLecturerOfGroup(groupId) || (
+            isMemberOfGroup(groupId) && (
+              resource.data.targetUserId == request.auth.uid ||
+              resource.data.userId == request.auth.uid ||
+              resource.data.lecturerId == request.auth.uid
+            )
+          );
+        }
+
+        match /presence/{userId} {
+          allow read: if isMemberOfGroup(groupId);
+          allow create, update: if signedIn() && request.auth.uid == userId;
+          allow delete: if signedIn() && request.auth.uid == userId;
+        }
+      }
+
+      // Analytics: any group member can read (lecturers see aggregated metrics; file content
+      // is still gated by the files/folders rules). Students and lecturers can update their own entry.
+      match /analytics/{groupId}/members/{memberId} {
+        allow read: if signedIn() && isMemberOfGroup(groupId);
+        allow create: if signedIn() && isMemberOfGroup(groupId);
+        allow update: if signedIn() &&
+          (request.auth.uid == memberId || isLecturerOfGroup(groupId));
+        allow delete: if isLecturerOfGroup(groupId);
+      }
+
+      // Document content (the actual workspace text, keyed by fileId). Each doc stores
+      // groupId, so gate it exactly like workspace content: members read freely,
+      // lecturers only after submission unlock. Only student members may write.
+      match /documents/{docId} {
+        allow read: if signedIn() &&
+          resource.data.groupId != null &&
+          canReadWorkspaceContent(resource.data.groupId);
+        allow create: if signedIn() &&
+          request.resource.data.groupId != null &&
+          isMemberOfGroup(request.resource.data.groupId) && !isLecturer();
+        allow update: if signedIn() &&
+          isMemberOfGroup(resource.data.groupId) && !isLecturer();
+        allow delete: if signedIn() &&
+          isMemberOfGroup(resource.data.groupId) && !isLecturer();
+      }
+
+      // Reports are created during submission; any group member (student or lecturer) may read.
+      // A lecturer querying by groupId will only see reports for groups they are in.
+      match /reports/{reportId} {
+        allow read: if signedIn() && (
+          resource.data.groupId == null ||
+          (isMemberOfGroup(resource.data.groupId) &&
+            (!isLecturer() || submissionUnlockedForLecturer(resource.data.groupId)))
+        );
+        // Reports are written during a student submission. Require the caller to be a
+        // member of the report's group so a report can't be forged/overwritten by outsiders.
+        allow create: if signedIn() &&
+          request.resource.data.groupId != null &&
+          isMemberOfGroup(request.resource.data.groupId);
+        allow update: if signedIn() &&
+          isMemberOfGroup(resource.data.groupId);
+        allow delete: if isLecturer();
+      }
+
+      match /submissions/{submissionId} {
+        allow read: if signedIn() && (
+          resource.data.submittedBy == request.auth.uid ||
+          resource.data.userId == request.auth.uid ||
+          resource.data.lecturerId == request.auth.uid ||
+          (resource.data.workspaceId != null &&
+            isMemberOfGroup(resource.data.workspaceId) &&
+            canReadWorkspaceContent(resource.data.workspaceId))
+        );
+        // A submission may only be created/updated by its own author (the student who
+        // submitted) and only for a workspace they belong to. Two write shapes exist:
+        // saveSubmissionReport keys by userId; saveFullSubmission keys by submittedBy.
+        allow create: if signedIn() &&
+          (request.resource.data.workspaceId != null
+            ? isMemberOfGroup(request.resource.data.workspaceId)
+            : isMemberOfGroup(request.resource.data.groupId)) &&
+          (request.resource.data.submittedBy == request.auth.uid ||
+            request.resource.data.userId == request.auth.uid);
+        allow update: if signedIn() && (
+          resource.data.submittedBy == request.auth.uid ||
+          resource.data.userId == request.auth.uid ||
+          // Lecturers reviewing a submission flip its status (reviewedAt/status only).
+          resource.data.lecturerId == request.auth.uid
+        );
+        // The assigned lecturer (or a lecturer of the submission's workspace) may delete it.
+        allow delete: if signedIn() && (
+          resource.data.lecturerId == request.auth.uid ||
+          (resource.data.workspaceId != null && isLecturerOfGroup(resource.data.workspaceId))
+        );
+      }
+    }
+  }

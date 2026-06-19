@@ -1,0 +1,32 @@
+
+                }}><img src="logo.png" alt="Peerlytics" width="80" height="80" style="border-radius:16px;object-fit:cover" onerror="this.style.display='none'" /></div>
+              }}><img src="logo.png" width="40" height="40" style="border-radius:10px;object-fit:cover" alt="" /></div>
+                {darkMode ? 'Light' : 'Dark'}
+                {userRole === 'student' ? 'Lecturer' : 'Student'}
+                    {tab === 'dashboard' && ''}
+                    {tab === 'workspace' && ''}
+                    {tab === 'groups' && ''}
+                      {tab === 'contribution' && ''}
+                      {tab === 'fairness' && ''}
+                      {tab === 'analytics' && ''}
+                      {tab === 'grading' && ''}
+                    <h1 style={{ margin: '0 0 8px 0', fontSize: '28px', fontWeight: '700' }}>Welcome back, {currentUser.name}!</h1>
+                    <h2 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: '600' }}>Group Leaderboard</h2>
+                              <span>{member.edits}</span>
+                              <span>{member.timeSpent}h</span>
+                              <span>{member.taskCompletion}%</span>
+                  <h1 style={{ margin: '0 0 30px 0', fontSize: '28px', fontWeight: '700' }}>Contribution Tracker</h1>
+                  <h1 style={{ margin: '0 0 30px 0', fontSize: '28px', fontWeight: '700' }}>Fairness Detection</h1>
+                          {member.status === 'top-contributor' && 'Top Contributor'}
+                          {member.status === 'low-contributor' && 'Low Contributor'}
+                          {member.status === 'balanced' && 'Balanced'}
+                  <h1 style={{ margin: '0 0 30px 0', fontSize: '28px', fontWeight: '700' }}>Analytics Dashboard</h1>
+                  <h1 style={{ margin: '0 0 30px 0', fontSize: '28px', fontWeight: '700' }}>Automated Grading</h1>
+                      AI-Suggested Grades based on effort, contribution, and fairness metrics.
+                  <h1 style={{ margin: '0 0 30px 0', fontSize: '28px', fontWeight: '700' }}>My Workspace</h1>
+                          {file.type === 'document' && ''}
+                          {file.type === 'spreadsheet' && 'XLS'}
+                          {file.type === 'presentation' && ''}
+                          {file.type === 'code' && ''}
+                  <h1 style={{ margin: '0 0 30px 0', fontSize: '28px', fontWeight: '700' }}>My Groups</h1>
+                        {currentGroup.members.length} members | Due {currentGroup.deadline}

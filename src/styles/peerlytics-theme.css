@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --pl-primary: #1d9e75;
+  --pl-primary-dark: #0f6e56;
+  --pl-mint: #7cb89a;
+  --pl-mint-light: #a8d5bc;
+  --pl-bg: #f0f7f4;
+  --pl-surface: #ffffff;
+  --pl-canvas: #e8eeeb;
+  --pl-border: #dce5e0;
+  --pl-text: #1a2e24;
+  --pl-text-muted: #5f6f66;
+  --pl-shadow: 0 2px 12px rgba(45, 74, 62, 0.08);
+  --pl-radius: 12px;
+}
+
+body {
+  margin: 0;
+  background: var(--pl-bg);
+  color: var(--pl-text);
+}
+
+/* ─── Shared animations (user-friendly loading / entrance / status) ─── */
+@keyframes pl-spin { to { transform: rotate(360deg); } }
+@keyframes pl-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pl-scale-in { from { opacity: 0; transform: translateY(8px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes pl-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes pl-shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+
+/* Spinner — add inline color via `style={{ borderTopColor }}` or use currentColor */
+.pl-spinner {
+  display: inline-block;
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: pl-spin 0.7s linear infinite;
+  vertical-align: middle;
+}
+.pl-spinner-lg { width: 28px; height: 28px; border-width: 3px; }
+
+/* Modal / dialog entrance */
+.pl-modal-enter { animation: pl-scale-in 0.18s cubic-bezier(0.22, 1, 0.36, 1); }
+.pl-fade-in { animation: pl-fade-in 0.2s ease; }
+.pl-pulse { animation: pl-pulse 1.4s ease-in-out infinite; }
+
+/* Skeleton shimmer block for loading placeholders */
+.pl-skeleton {
+  background: linear-gradient(90deg, rgba(150,150,150,0.12) 25%, rgba(150,150,150,0.22) 37%, rgba(150,150,150,0.12) 63%);
+  background-size: 800px 100%;
+  animation: pl-shimmer 1.3s infinite linear;
+  border-radius: 6px;
+}
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .pl-spinner, .pl-modal-enter, .pl-fade-in, .pl-pulse, .pl-skeleton { animation: none !important; }
+}

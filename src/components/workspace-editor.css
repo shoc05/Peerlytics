@@ -1,0 +1,203 @@
+/* Google Docs–style document editor */
+.workspace-editor-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--pl-canvas, #e8eeeb);
+}
+
+.workspace-editor-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  background: #fff;
+  border-bottom: 1px solid #dce5e0;
+  box-shadow: 0 1px 2px rgba(45, 74, 62, 0.06);
+}
+
+.doc-toolbar-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: #3d4f47;
+  cursor: pointer;
+  line-height: 1.2;
+  min-width: 32px;
+}
+
+.doc-toolbar-btn.wide {
+  min-width: auto;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.workspace-editor-toolbar button,
+.workspace-editor-toolbar .doc-toolbar-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: #3d4f47;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.align-icon {
+  display: inline-block;
+  width: 16px;
+  height: 12px;
+  border-top: 2px solid currentColor;
+}
+
+.align-icon.align-left {
+  box-shadow: inset 0 4px 0 currentColor;
+}
+
+.align-icon.align-center {
+  box-shadow: inset 0 4px 0 currentColor;
+  margin: 0 auto;
+}
+
+.align-icon.align-right {
+  box-shadow: inset 0 4px 0 currentColor;
+  margin-left: auto;
+}
+
+.workspace-editor-toolbar .doc-toolbar-btn:hover:not(:disabled),
+.workspace-editor-toolbar button:hover:not(:disabled) {
+  background: #eef6f1;
+}
+
+.workspace-editor-toolbar .doc-toolbar-btn.is-active,
+.workspace-editor-toolbar button.is-active {
+  background: #e0f2ea;
+  color: #1d6b52;
+  border-color: #b8dcc8;
+}
+
+.workspace-editor-toolbar .doc-toolbar-btn:disabled,
+.workspace-editor-toolbar button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.workspace-editor-toolbar .toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background: #dce5e0;
+  margin: 0 4px;
+}
+
+/* Scrollable gray canvas — pages sit centered like Google Docs */
+.workspace-editor-canvas {
+  flex: 1;
+  overflow: auto;
+  overflow-x: hidden;
+  padding: 24px 16px 40px;
+  background: var(--pl-canvas, #e8eeeb);
+}
+
+.workspace-editor-gdoc-column {
+  width: 816px;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+/* Single flowing page column — white card, subtle page-break lines inside */
+.workspace-editor-gdoc-page {
+  width: 100%;
+  background: #fff;
+  box-shadow:
+    0 1px 3px 1px rgba(60, 64, 67, 0.12),
+    0 0 0 1px rgba(0, 0, 0, 0.04);
+  border-radius: 2px;
+  box-sizing: border-box;
+}
+
+.workspace-editor-gdoc-page .ProseMirror {
+  outline: none;
+  min-height: 864px;
+  padding: 96px 96px 96px 96px;
+  box-sizing: border-box;
+  font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+  font-size: 11pt;
+  line-height: 1.5;
+  color: #202124;
+  background-color: #fff;
+  /* Page break lines every 1056px (full page height) — scrolls with content */
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 1055px,
+    #e0e4e1 1055px,
+    #e0e4e1 1056px
+  );
+  background-attachment: local;
+  background-size: 100% 1056px;
+}
+
+.workspace-editor-gdoc-page.read-only .ProseMirror {
+  background-color: #fafcfb;
+}
+
+.workspace-editor-gdoc-page .ProseMirror p {
+  margin: 0 0 0.75em;
+}
+
+.workspace-editor-gdoc-page .ProseMirror h1 {
+  font-size: 20pt;
+  font-weight: 600;
+  margin: 1em 0 0.5em;
+}
+
+.workspace-editor-gdoc-page .ProseMirror h2 {
+  font-size: 16pt;
+  font-weight: 600;
+  margin: 0.9em 0 0.4em;
+}
+
+.workspace-editor-gdoc-page .ProseMirror h3 {
+  font-size: 13pt;
+  font-weight: 600;
+  margin: 0.8em 0 0.35em;
+}
+
+.workspace-editor-gdoc-page .ProseMirror ul,
+.workspace-editor-gdoc-page .ProseMirror ol {
+  padding-left: 1.5em;
+  margin: 0 0 0.75em;
+}
+
+.workspace-editor-gdoc-page .ProseMirror mark.flagged-paste {
+  background: rgba(231, 76, 60, 0.35);
+  color: #b71c1c;
+  border-bottom: 2px solid #e74c3c;
+}
+
+.workspace-editor-gdoc-page .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #9aa0a6;
+  pointer-events: none;
+  height: 0;
+}
+
+.workspace-editor-status {
+  font-size: 11px;
+  color: #5f6f66;
+  padding: 6px 14px;
+  background: #fff;
+  border-top: 1px solid #dce5e0;
+  display: flex;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
