@@ -1,20 +1,27 @@
 import React, { useState } from 'react';
 import { getInitials, getAvatarColor } from '../utils/avatarHelpers';
+import ClassSectionPicker from './ClassSectionPicker';
 
 export default function ProfilePanel({ user, onSave, onClose, saving = false, darkMode = true }) {
   const [name, setName] = useState(user?.name || '');
-  // Email and role are not editable — only the display name can change.
+  const isStudent = user?.role === 'student';
+  // Email and role are not editable. Students may also edit their class/section.
   const email = user?.email || '';
+  const initialClass = user?.classSection || '';
+  const [classSection, setClassSection] = useState(initialClass);
 
   const initials = getInitials(name || user?.name);
   const bgColor = getAvatarColor(initials);
 
-  const dirty = name.trim() !== (user?.name || '');
+  const nameDirty = name.trim() !== (user?.name || '');
+  const classDirty = isStudent && classSection !== initialClass;
+  const dirty = nameDirty || classDirty;
 
   const handleSave = (e) => {
     e.preventDefault();
     if (!dirty || saving) return;
-    onSave?.({ name: name.trim() });
+    if (isStudent && !classSection) return; // require a class for students
+    onSave?.({ name: name.trim(), ...(isStudent ? { classSection } : {}) });
   };
 
   const roleLabel = user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : '—';
@@ -79,6 +86,19 @@ export default function ProfilePanel({ user, onSave, onClose, saving = false, da
             className={`w-full px-3 py-2.5 rounded-lg border outline-none cursor-not-allowed opacity-80 ${inputCls}`}
           />
         </label>
+
+        {isStudent && (
+          <div className="mb-3.5">
+            <ClassSectionPicker
+              value={classSection}
+              onChange={setClassSection}
+              darkMode={darkMode}
+              selectClassName={`w-full px-3 py-2.5 rounded-lg border outline-none transition cursor-pointer focus:ring-4 focus:ring-brand-500/15 ${inputCls}`}
+              inputClassName={`w-full px-3 py-2.5 rounded-lg border outline-none transition focus:ring-4 focus:ring-brand-500/15 ${inputCls}`}
+              labelClassName={labelCls}
+            />
+          </div>
+        )}
 
         <label className="block mb-6">
           <span className={labelCls}>Role</span>

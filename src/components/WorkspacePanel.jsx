@@ -731,6 +731,7 @@ export default function WorkspacePanel({
       versionHistory: versions,
       pasteEvents: filePasteEvents,
       analytics,
+      classSection: currentUser?.classSection || '',
     });
 
     setSubmissionReport(saved);
@@ -824,6 +825,7 @@ export default function WorkspacePanel({
       versionHistory: [],
       pasteEvents: [],
       analytics,
+      classSection: currentUser?.classSection || '',
     });
 
     pushActivity?.(userName, `submitted folder "${folder.name}" (${files.length} file(s)) for review`);

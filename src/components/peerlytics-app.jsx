@@ -138,7 +138,7 @@ function formatSecondsExact(totalSeconds) {
 
 const PeerlyticsDashboard = () => {
   const navigate = useNavigate();
-  const { user: currentUser, isLecturer, isAdmin } = useAuth();
+  const { user: currentUser, isLecturer, isAdmin, refreshProfile } = useAuth();
   const [darkMode, setDarkMode] = useState(() => {
     try {
       return localStorage.getItem('peerlytics-theme') === 'dark';
@@ -301,15 +301,16 @@ const PeerlyticsDashboard = () => {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3200);
   }, []);
 
-  const handleProfileSave = async ({ name }) => {
+  const handleProfileSave = async ({ name, classSection }) => {
     if (!currentUser?.uid) return;
     setProfileSaving(true);
     try {
       const { updateUserProfile } = await import('../firebase/firestoreService');
-      await updateUserProfile(currentUser.uid, { name }); // only the display name is editable
+      // Name is always editable; students may also update their class/section.
+      await updateUserProfile(currentUser.uid, { name, classSection });
+      await refreshProfile?.();
       setShowProfilePanel(false);
       pushToast('Profile updated');
-      // The AuthContext will update automatically via getUserProfile subscription
     } catch (err) {
       throw new Error(err.message || 'Failed to update profile');
     } finally {

@@ -62,11 +62,13 @@ export async function getUsersByIds(uids = []) {
   return out;
 }
 
-export async function updateUserProfile(uid, { name, email }) {
+export async function updateUserProfile(uid, { name, email, classSection } = {}) {
   if (!uid) throw new Error('User ID required');
   await updateDoc(doc(db(), 'users', uid), {
     ...(name ? { name } : {}),
     ...(email ? { email } : {}),
+    // Allow setting class/section (students). undefined = leave unchanged.
+    ...(classSection !== undefined ? { classSection } : {}),
     updatedAt: serverTimestamp(),
   });
   return getUserProfile(uid);
@@ -633,6 +635,7 @@ export async function saveFullSubmission({
   versionHistory = [],
   pasteEvents = [],
   analytics = [],
+  classSection = '',
 }) {
   if (!report?.id || !groupId || !userId) throw new Error('Missing report, group, or user');
 
@@ -673,6 +676,9 @@ export async function saveFullSubmission({
     workspaceId: groupId,
     submittedBy: userId,
     submittedByName,
+    // Snapshot the student's class/section at submit time so reports group by the class they
+    // were in THEN, even if they later change it (reports are frozen snapshots).
+    classSection: classSection || '',
     lecturerEmail,
     type,
     fileId: fileId || null,

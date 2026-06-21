@@ -4,6 +4,7 @@ import Logo from './Logo';
 import AuthAlert from './AuthAlert';
 import AuthThemeToggle from './AuthThemeToggle';
 import { signUp } from '../firebase/authService';
+import ClassSectionPicker from './ClassSectionPicker';
 import { useAuth } from '../context/AuthContext';
 import { mapAuthError } from '../utils/authErrors';
 import {
@@ -37,8 +38,8 @@ export default function Signup() {
       setError('Password must be at least 6 characters.');
       return;
     }
-    if (role === 'student' && (!classSection.trim() || classSection === '__other')) {
-      setError('Please select or enter your class/section.');
+    if (role === 'student' && !classSection.trim()) {
+      setError('Please select your class/year (and section/department).');
       return;
     }
     setError('');
@@ -112,30 +113,8 @@ export default function Signup() {
           </div>
 
           {role === 'student' && (
-            <div style={{ marginBottom: 4 }}>
-              <label style={authLabelStyle(darkMode)}>Class / Section</label>
-              <select
-                value={classSection}
-                onChange={(e) => setClassSection(e.target.value)}
-                required
-                disabled={loading}
-                style={{ ...authInputStyle(darkMode), cursor: 'pointer' }}
-              >
-                <option value="">Select your class…</option>
-                <option value="Level 2">Level 2</option>
-                <option value="Level 3">Level 3</option>
-                <option value="Open">Open</option>
-                <option value="__other">Other (type below)</option>
-              </select>
-              {classSection === '__other' && (
-                <input
-                  type="text"
-                  onChange={(e) => setClassSection(e.target.value)}
-                  placeholder="e.g. CST Year 2, Section A"
-                  disabled={loading}
-                  style={{ ...authInputStyle(darkMode), marginTop: 8 }}
-                />
-              )}
+            <div style={{ marginTop: 16, marginBottom: 4 }}>
+              <ClassSectionPicker value={classSection} onChange={setClassSection} darkMode={darkMode} />
             </div>
           )}
 
