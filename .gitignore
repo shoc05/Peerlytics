@@ -25,3 +25,7 @@ npm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local secret files used by scripts/setup-github.sh
+.secrets.env
+secrets/
