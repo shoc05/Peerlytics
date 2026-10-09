@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  website:
+    # This name is a required status check in branch protection. Keep it in sync with scripts/setup-github.sh.
+    name: Website (lint, test, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint --if-present
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+
+  backend:
+    # Required status check; keep in sync with scripts/setup-github.sh.
+    name: backend (lint, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Lint (syntax check until ESLint is added)
+        run: |
+          npm run lint --if-present
+          git ls-files '*.js' | xargs -n1 node --check
+      - name: Test
+        run: npm test --if-present
