@@ -10,8 +10,9 @@
 //   STEP 7  JSON output { scores, baseScore, penalties, recommendedScore, flags,
 //                         behaviorSummary, lecturerNote }
 //
-// AI detection is treated as a WEAK signal only: an AI penalty applies solely when
-// ai_probability > 0.7 AND (high paste OR low edits). No cheating accusations.
+// AI detection is treated as a WEAK signal: ai_probability > 0.5 costs −1 to −3 on its
+// own, and corroboration (high paste OR very few edits) adds −1, capped at −4.
+// No cheating accusations; the lecturer's override is final.
 //
 // Locking: this is a pure function of static inputs. Callers pass the frozen snapshot
 // for a locked submission, so the output is itself a frozen snapshot.
