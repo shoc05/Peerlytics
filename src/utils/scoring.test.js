@@ -37,14 +37,22 @@ test('high paste (>70%) is penalised and flagged', () => {
 });
 
 // ─── behaviorGrade: AI is a weak signal only ───
-test('high AI alone (no corroboration) applies NO AI penalty', () => {
+test('low AI (≤ 0.5) applies no AI penalty', () => {
+  const g = gradeSubmission({ writing: { grammar: 8, clarity: 8, structure: 8, content: 8 }, timeSpentSeconds: 9999, editCount: 40, pastePercentage: 0, aiProbability: 0.4 });
+  assert.equal(g.penalties.ai, 0);
+  assert.ok(!g.flags.includes('Possible AI Assistance'));
+});
+
+test('high AI alone (no corroboration) is still penalised, without the corroboration bonus', () => {
+  // Typed-in AI text (many edits, no paste) must not score the same as no AI at all.
   const g = gradeSubmission({ writing: { grammar: 8, clarity: 8, structure: 8, content: 8 }, timeSpentSeconds: 9999, editCount: 40, pastePercentage: 0, aiProbability: 0.95 });
-  assert.equal(g.penalties.ai, 0); // no high paste, enough edits → not corroborated
+  assert.equal(g.penalties.ai, 3); // ai > 0.85 → −3, not corroborated → no +1
+  assert.ok(g.flags.includes('Possible AI Assistance'));
 });
 
 test('high AI + corroboration (high paste) applies an AI penalty + flag', () => {
   const g = gradeSubmission({ writing: { grammar: 8, clarity: 8, structure: 8, content: 8 }, timeSpentSeconds: 9999, editCount: 40, pastePercentage: 90, aiProbability: 0.95 });
-  assert.ok(g.penalties.ai >= 2);
+  assert.equal(g.penalties.ai, 4); // −3 for ai > 0.85, +1 for corroboration (cap −4)
   assert.ok(g.flags.includes('Possible AI Assistance'));
 });
 
