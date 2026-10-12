@@ -1,0 +1,25 @@
+name: PR title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  jira-key:
+    # Required status check; keep in sync with scripts/setup-github.sh.
+    name: Jira key in PR title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for a Jira key such as PEER-123
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if printf '%s' "$TITLE" | grep -qE '\b[A-Z][A-Z0-9]+-[0-9]+\b'; then
+            echo "OK: $TITLE"
+          else
+            echo "::error::PR title must contain a Jira key, for example 'PEER-12 Add login page'. Got: $TITLE"
+            exit 1
+          fi
