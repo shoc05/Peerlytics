@@ -1,0 +1,178 @@
+Summary,Issue Type,Assignee,Sprint,Epic Link,Labels,Due Date,Description
+"Install VS Code, shared extensions and Claude Code (Sangay)",Task,Sangay,Setup,CI/CD and DevOps,,2026-10-05,"Install VS Code with the shared extensions (GitHub Pull Requests, Docker, Kubernetes, ESLint, Prettier, Draw.io Integration, Jira) and Claude Code. Join Jira with the same email as git config user.email.
+
+Done when: the tools open the repo and Jira shows your account with your git email"
+GitHub Actions quickstart in a practice repo (Sangay),Task,Sangay,Setup,CI/CD and DevOps,,2026-10-05,"Create actions-practice, add .github/workflows/hello.yml from the guide, then add a failing step.
+
+Done when: Sangay has screenshots of a green and a red run"
+"Install VS Code, shared extensions and Claude Code (Kezang)",Task,Kezang,Setup,CI/CD and DevOps,,2026-10-05,"Install VS Code with the shared extensions (GitHub Pull Requests, Docker, Kubernetes, ESLint, Prettier, Draw.io Integration, Jira) and Claude Code. Join Jira with the same email as git config user.email.
+
+Done when: the tools open the repo and Jira shows your account with your git email"
+GitHub Actions quickstart in a practice repo (Kezang),Task,Kezang,Setup,CI/CD and DevOps,,2026-10-05,"Create actions-practice, add .github/workflows/hello.yml from the guide, then add a failing step.
+
+Done when: Sangay has screenshots of a green and a red run"
+"Install VS Code, shared extensions and Claude Code (Sonam)",Task,Sonam,Setup,CI/CD and DevOps,,2026-10-05,"Install VS Code with the shared extensions (GitHub Pull Requests, Docker, Kubernetes, ESLint, Prettier, Draw.io Integration, Jira) and Claude Code. Join Jira with the same email as git config user.email.
+
+Done when: the tools open the repo and Jira shows your account with your git email"
+GitHub Actions quickstart in a practice repo (Sonam),Task,Sonam,Setup,CI/CD and DevOps,,2026-10-05,"Create actions-practice, add .github/workflows/hello.yml from the guide, then add a failing step.
+
+Done when: Sangay has screenshots of a green and a red run"
+"Install VS Code, shared extensions and Claude Code (Tshewang)",Task,Tshewang,Setup,CI/CD and DevOps,,2026-10-05,"Install VS Code with the shared extensions (GitHub Pull Requests, Docker, Kubernetes, ESLint, Prettier, Draw.io Integration, Jira) and Claude Code. Join Jira with the same email as git config user.email.
+
+Done when: the tools open the repo and Jira shows your account with your git email"
+GitHub Actions quickstart in a practice repo (Tshewang),Task,Tshewang,Setup,CI/CD and DevOps,,2026-10-05,"Create actions-practice, add .github/workflows/hello.yml from the guide, then add a failing step.
+
+Done when: Sangay has screenshots of a green and a red run"
+"Install VS Code, shared extensions and Claude Code (Ngawang)",Task,Ngawang,Setup,CI/CD and DevOps,,2026-10-05,"Install VS Code with the shared extensions (GitHub Pull Requests, Docker, Kubernetes, ESLint, Prettier, Draw.io Integration, Jira) and Claude Code. Join Jira with the same email as git config user.email.
+
+Done when: the tools open the repo and Jira shows your account with your git email"
+GitHub Actions quickstart in a practice repo (Ngawang),Task,Ngawang,Setup,CI/CD and DevOps,,2026-10-05,"Create actions-practice, add .github/workflows/hello.yml from the guide, then add a failing step.
+
+Done when: Sangay has screenshots of a green and a red run"
+Create Jira site and PEER Scrum project,Task,Sangay,Setup,CI/CD and DevOps,,2026-10-03,"Free plan, site peerlytics, Scrum project Peerlytics with key PEER, invite the four builders, columns To Do, In Progress, In Review, Done.
+
+Done when: the board has the four columns and all members are invited"
+Create sprints and epics in Jira,Task,Sangay,Setup,CI/CD and DevOps,,2026-10-03,"One sprint per phase with the dates and goals from the guide, and the 17 epics.
+
+Done when: all six sprints and 17 epics exist"
+Connect GitHub for Jira and add the merge automation,Task,Sangay,Setup,CI/CD and DevOps,,2026-10-03,"Install GitHub for Jira, connect the repo, and add one rule: pull request merged moves the linked issue to Done.
+
+Done when: a PR titled PEER-1 Test link shows in the Development panel of PEER-1, and merging moves it to Done"
+Branch protection for develop and main,Task,Sangay,Setup,CI/CD and DevOps,,2026-10-03,"Run scripts/setup-github.sh: require a PR, 1 approval and the CI and Jira-key checks. Only Sangay merges to main and creates v* tags.
+
+Done when: a direct push to main or develop is refused, and a PR needs the checks plus an approval"
+Create staging and production environments,Task,Sangay,Setup,CI/CD and DevOps,,2026-10-03,"staging deploys from develop. production deploys from v* tags with Sangay as required reviewer.
+
+Done when: both environments exist and production asks Sangay to approve"
+Add GitHub Actions secrets and connect Snyk,Task,Sangay,Setup,Security,,2026-10-03,"Add every secret in the Reference table of the guide. Create the Snyk account and import the repo.
+
+Done when: gh secret list shows all secrets and Snyk shows the repo"
+Write the shared CLAUDE.md,Task,Sangay,Setup,CI/CD and DevOps,,2026-10-03,"Run /init, then append the Peerlytics rules block from the guide.
+
+Done when: CLAUDE.md is merged"
+Repo audit (docs/audit.md),Task,Sangay,Setup,CI/CD and DevOps,,2026-10-05,"Prompt S1: what exists, problems, and done, partly done or missing for each feature. No code changes.
+
+Done when: docs/audit.md is merged and the team has read it"
+Jira import file and import,Task,Sangay,Setup,CI/CD and DevOps,,2026-10-05,"Prompt S2: jira-import.csv with one row per step, then import it with the Jira CSV importer.
+
+Done when: every step is an issue in the right sprint and epic"
+Sign in with Google,Story,Kezang,Phase 1 - Kezang,Login and roles,,2026-10-06,"Add Google sign-in with Firebase Auth next to email sign-in.
+
+Done when: a student signs in with Google and lands on My courses"
+Four roles with Firebase custom claims,Story,Kezang,Phase 1 - Kezang,Login and roles,,2026-10-06,"superAdmin, collegeAdmin, lecturer and student as custom claims. Users can no longer set their own role (audit problem 1).
+
+Done when: each role sees only its own screens and a student cannot make themselves a lecturer"
+Backend checks the Firebase ID token on every request,Task,Kezang,Phase 1 - Kezang,Security,,2026-10-06,"Express middleware verifies the ID token and role on every route except /health (audit problem 4).
+
+Done when: requests without a valid token get 401 and tests cover each role"
+Server-side deadlines and auto-submit,Story,Kezang,Phase 1 - Kezang,"Deadlines, auto-submit and extensions",,2026-10-06,"Move auto-submit from the browser to the server so it happens even when no tab is open.
+
+Done when: an assignment is submitted at its deadline with every browser closed"
+PostgreSQL schema and migrations,Task,Kezang,Phase 1 - Kezang,PostgreSQL,,2026-10-06,"Tables: colleges, courses, enrolments, assignments, submissions, analysis_results, grades, overrides, audit_log.
+
+Done when: migrations run on a fresh database and integration tests use a real PostgreSQL"
+analysis_results write-once trigger,Task,Kezang,Phase 1 - Kezang,PostgreSQL,,2026-10-06,"A database trigger blocks UPDATE and DELETE on analysis_results.
+
+Done when: an UPDATE or DELETE fails and a test proves it"
+Course site with tabs,Story,Sonam,Phase 2 - Sonam,Courses and course site,,2026-10-08,"Course page with Overview (announcements), Assignments, Groups, Members and Grades.
+
+Done when: a lecturer creates a course and students see all five tabs"
+Join a course with a join code,Story,Sonam,Phase 2 - Sonam,Courses and course site,,2026-10-08,"Students join with a code or an invite.
+
+Done when: a student enters a code and appears in Members"
+OpenAI analysis with Hugging Face and VWT fallback,Story,Sonam,Phase 2 - Sonam,OpenAI analysis and reports,,2026-10-08,"The backend uses OpenAI for AI likelihood, writing quality, difficulty and feedback. The ai_provider flag switches to Hugging Face and VWT.
+
+Done when: both providers work behind the flag and tests stub them"
+Locked analysis results,Story,Sonam,Phase 2 - Sonam,OpenAI analysis and reports,,2026-10-08,"Store each analysis once in analysis_results. Students can no longer edit reports (audit problem 2).
+
+Done when: a student cannot change a report after submitting"
+Group tasks,Story,Sonam,Phase 2 - Sonam,Group tasks and rubric,,2026-10-08,"Groups create and assign tasks. The Tasks score is the share of the tasks of a student done by the deadline (audit problem 6).
+
+Done when: the Tasks score comes from real task data"
+Rubric weights per assignment,Story,Sonam,Phase 2 - Sonam,Group tasks and rubric,,2026-10-08,"The lecturer sets Time, Edits, Writing and Tasks weights (default 0.25 each). Grading runs on the server (audit problem 3).
+
+Done when: changing the weights changes the suggested grade and tests cover it"
+CSV grade export,Story,Sonam,Phase 2 - Sonam,Grading and lecturer tools,,2026-10-08,"Export the grades and overrides of a course to CSV.
+
+Done when: the CSV opens in a spreadsheet with one row per student"
+XML and XSLT report export,Story,Sonam,Phase 2 - Sonam,Grading and lecturer tools,,2026-10-08,"Export a report as XML with an XSLT stylesheet.
+
+Done when: the XML renders as a styled report in a browser"
+Real-time co-editing with Yjs and Hocuspocus,Story,Sonam,Phase 2 - Sonam,"Editor, Yjs, document tabs, offline",,2026-10-08,"collab/ server with Hocuspocus. TipTap uses Yjs, behind a feature flag.
+
+Done when: two browsers edit the same document live without losing text"
+Document tabs and sub-tabs,Story,Sonam,Phase 2 - Sonam,"Editor, Yjs, document tabs, offline",,2026-10-08,"Each tab is its own XmlFragment in the Yjs document, behind a feature flag.
+
+Done when: a user adds, renames and nests tabs and others see them live"
+Security hardening,Task,Tshewang,Phase 3 - Tshewang,Security,,2026-10-11,"Zod for request bodies, Ajv for external results and tracking events, rate limits, and a Firestore rules review.
+
+Done when: invalid input gets 400 and the security problems in the audit are closed"
+College admin screens,Story,Tshewang,Phase 3 - Tshewang,"College admin, licensing and usage",,2026-10-11,"collegeAdmin manages lecturers and courses for their college.
+
+Done when: a college admin adds a lecturer who can then create courses"
+Licensing and usage,Story,Tshewang,Phase 3 - Tshewang,"College admin, licensing and usage",,2026-10-11,"Licence limits per college and a usage view, behind a feature flag.
+
+Done when: usage counts are shown and limits are enforced"
+Email-domain sign-in,Story,Tshewang,Phase 3 - Tshewang,Login and roles,,2026-10-11,"Only allowed college email domains can sign up.
+
+Done when: an address from another domain is refused"
+Security scans in CI (Snyk),Task,Tshewang,Phase 3 - Tshewang,CI/CD and DevOps,,2026-10-11,"Snyk for packages, code, Docker images and Kubernetes files in security.yml.
+
+Done when: the scan runs on every PR and high issues fail it"
+Offline editing,Story,Tshewang,Phase 3 - Tshewang,"Editor, Yjs, document tabs, offline",,2026-10-11,"Edits made offline sync when back online, behind a feature flag.
+
+Done when: text typed offline appears for others after reconnecting"
+CSV invite,Story,Tshewang,Phase 3 - Tshewang,Courses and course site,,2026-10-11,"The lecturer uploads a CSV of student emails to invite, behind a feature flag.
+
+Done when: everyone in the CSV gets an invite"
+Random groups,Story,Tshewang,Phase 3 - Tshewang,Courses and course site,,2026-10-11,"The lecturer splits enrolled students into random groups of a chosen size.
+
+Done when: groups are created with no student left out"
+Push notifications,Story,Tshewang,Phase 3 - Tshewang,Notifications and push,,2026-10-11,"notifier/ sends deadline and grade push notifications, behind a feature flag.
+
+Done when: a student gets a push before a deadline"
+UI polish pass,Task,Ngawang,Phase 4 - Ngawang,UI polish and tests,,2026-10-13,"Consistent spacing, empty states, loading and error states.
+
+Done when: no screen shows raw errors or blank areas"
+Privacy notice,Story,Ngawang,Phase 4 - Ngawang,Privacy and data policy,,2026-10-13,"docs/privacy-notice.md and an in-app page: what is tracked (time, counts, paste events, versions) and what is not.
+
+Done when: the notice is linked from sign-up and matches what the code records"
+Deadline extensions,Story,Ngawang,Phase 4 - Ngawang,"Deadlines, auto-submit and extensions",,2026-10-13,"The lecturer grants an extension to a student or group.
+
+Done when: an extended student is not auto-submitted at the original deadline"
+Inline feedback,Story,Ngawang,Phase 4 - Ngawang,Grading and lecturer tools,,2026-10-13,"The lecturer comments on parts of a submitted document.
+
+Done when: the student sees comments anchored to their text"
+Course dashboard,Story,Ngawang,Phase 4 - Ngawang,Grading and lecturer tools,,2026-10-13,"Lecturer overview of submissions, grades and flags for a course.
+
+Done when: a lecturer sees the status of every group on one page"
+Peer evaluation,Story,Ngawang,Phase 4 - Ngawang,Grading and lecturer tools,,2026-10-13,"Students rate the contribution of their group members.
+
+Done when: ratings are collected and shown to the lecturer"
+.docx export,Story,Ngawang,Phase 4 - Ngawang,"Editor, Yjs, document tabs, offline",,2026-10-13,"Export a document to .docx, behind a feature flag.
+
+Done when: the file opens in Word with headings and formatting intact"
+End-to-end tests,Task,Ngawang,Phase 4 - Ngawang,UI polish and tests,,2026-10-13,"E2E tests for sign-in, submit and grade override.
+
+Done when: E2E tests run in CI and pass"
+Staging on k3s,Task,Ngawang,Phase 4 - Ngawang,Kubernetes and IaC,,2026-10-13,"Kubernetes manifests and deploy-staging.yml. develop deploys to staging.
+
+Done when: merging to develop updates staging automatically"
+Feature flags with Remote Config,Task,Ngawang,Phase 4 - Ngawang,CI/CD and DevOps,,2026-10-13,"Every advanced feature reads its flag from Firebase Remote Config.
+
+Done when: turning a flag off hides the feature without a deploy"
+Release v1.0 to production,Task,Sangay,Phase 5 - Release,CI/CD and DevOps,,2026-10-15,"Tag v1.0. The production workflow deploys after Sangay approves.
+
+Done when: v1.0 is live in production"
+Monitoring with Prometheus and Grafana,Task,Sangay,Phase 5 - Release,Monitoring and backups,,2026-10-15,"Metrics, dashboards and alert emails.
+
+Done when: an alert email arrives when the API is down"
+Public status page (Uptime Kuma),Task,Sangay,Phase 5 - Release,Monitoring and backups,,2026-10-15,"Status page for the website and the API.
+
+Done when: the status page is public and shows both services"
+Backup restore drill,Task,Sangay,Phase 5 - Release,Monitoring and backups,,2026-10-15,"Restore PostgreSQL and Firestore from backup to a test environment.
+
+Done when: the restored data matches and the steps are written down"
+Final report and presentation,Task,Sangay,Phase 5 - Release,Report and presentation,,2026-10-15,"The report, which says Claude Code was used, and the slides.
+
+Done when: the report is submitted and the presentation is rehearsed"
