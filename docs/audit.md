@@ -2,7 +2,11 @@
 
 PEER-3 · 12 Oct 2026 · Sangay Tshokyee Tshering (project lead)
 
-Audited: branch `peer-3-claude-md-audit`, based on `main` at commit 26b3311 (after PEER-2 was merged). PR #1 (CI workflows) is open and not merged, so `main` has no CI yet. No application code, workflows or dependencies were changed for this audit.
+Audited: branch `peer-3-claude-md-audit`, based on `main` at commit 26b3311 (after PEER-2 was merged). No application code, workflows or dependencies were changed for this audit.
+
+Jira: the real project key is **PEER** (team-managed Scrum project, live since 13 Oct). Branch names, commits and PR titles use `PEER-<n>`, and CI's Jira key check enforces it.
+
+**Update 13 Oct:** PR #1 has since been merged, so `ci.yml` and `pr-title.yml` now run on every PR. `scripts/setup-github.sh` has been run: `develop` exists; `develop` and `main` require a PR, 1 approval and the three CI checks; `main` also needs the code owner; `v*` tags are admin-only; `staging` deploys from `develop` and `production` from `v*` tags with Sangay's approval. Only the PostgreSQL secrets are set so far. The CI rows below describe the state on 12 Oct.
 
 **Status values:** Done, Partial, Missing, Blocked. The Evidence column also says what *kind* of thing exists:
 
@@ -70,7 +74,7 @@ Owners follow the phase split in the team guide. Phase 1 is Kezang (roles, deadl
 | Exposed secrets | None found | Done | No secret files tracked now or in history. `.env` and `serviceAccountKey.json` are git-ignored. `src/firebase/firebase.js` contains the Firebase **web** config, which is public by design. | Low | Add `.env.example` with names only | Tshewang |
 | Feature flags | None | Missing | **Planned only.** No Remote Config in `src/`. | Unfinished features can't be shipped dark | Add a small flag reader (Remote Config) before Phase 2 features land | Ngawang |
 | Security scans | Snyk GitHub app on PRs | Partial | **Not verifiable** from the repo. A Snyk check appears on PRs; no `security.yml`; no code, image or IaC scans | Vulnerable packages go unnoticed | Add a `security.yml` workflow | Tshewang |
-| CI | Demo workflow on `main`; real CI in open PR #1 | Partial | PR #1 ran: backend pass, Jira key pass, website pass after PEER-2 | Merges are not gated on tests | Merge PR #1, then run `scripts/setup-github.sh` | Sangay |
+| CI | Demo workflow on `main`; real CI in open PR #1 | Partial | PR #1 ran: backend pass, Jira key pass, website pass after PEER-2 | Merges are not gated on tests | Done 13 Oct: PR #1 merged and `scripts/setup-github.sh` run. Next: add the remaining secrets as accounts are created | Sangay |
 | Staging | None | Missing | **Planned only.** No Docker, k3s or deploy workflow. | No safe place to test before production | Dockerfiles, then a k3s staging deploy from `develop` | Ngawang |
 | Monitoring | Console logs only | Missing | **Planned only.** No Prometheus, Grafana or Uptime Kuma config. | Outages go unnoticed | Health endpoint exists; add uptime checks first | Kezang |
 | Backups | None | Missing | **Planned only.** No Firestore export or database dump job | Data loss cannot be recovered | Scheduled Firestore export, then a PostgreSQL dump with a restore drill | Kezang |
@@ -100,7 +104,7 @@ These could expose data, produce wrong grades or break submissions. Every one of
 4. Server-side grading from locked inputs, plus append-only overrides (Sonam).
 5. The college, course, assignment and group hierarchy with join codes. Without it, a class can't enrol (Kezang, Sonam).
 6. A privacy notice that matches what is recorded, and a data deletion path (Ngawang).
-7. CI merged with branch protection (PR #1), `.env.example`, and a lint config (Sangay, Tshewang).
+7. `.env.example` and a lint config (Tshewang). CI and branch protection were done on 13 Oct.
 8. A deployable build: Docker plus staging, and a confirmed host (Ngawang, Tshewang).
 
 ### 3.3 Can stay behind a disabled feature flag

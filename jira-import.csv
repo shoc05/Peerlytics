@@ -1,178 +1,253 @@
-Summary,Issue Type,Assignee,Sprint,Epic Link,Labels,Due Date,Description
-"Install VS Code, shared extensions and Claude Code (Sangay)",Task,Sangay,Setup,CI/CD and DevOps,,2026-10-05,"Install VS Code with the shared extensions (GitHub Pull Requests, Docker, Kubernetes, ESLint, Prettier, Draw.io Integration, Jira) and Claude Code. Join Jira with the same email as git config user.email.
+Work item ID,Work type,Summary,Assignee,Parent,Labels,Labels,Due date,Description
+E1,Epic,Login and roles,Sangay,,,,,"All work for Login and roles.
 
-Done when: the tools open the repo and Jira shows your account with your git email"
-GitHub Actions quickstart in a practice repo (Sangay),Task,Sangay,Setup,CI/CD and DevOps,,2026-10-05,"Create actions-practice, add .github/workflows/hello.yml from the guide, then add a failing step.
+Done when: every work item in this epic is Done."
+E2,Epic,Courses and course site,Sangay,,,,,"All work for Courses and course site.
 
-Done when: Sangay has screenshots of a green and a red run"
-"Install VS Code, shared extensions and Claude Code (Kezang)",Task,Kezang,Setup,CI/CD and DevOps,,2026-10-05,"Install VS Code with the shared extensions (GitHub Pull Requests, Docker, Kubernetes, ESLint, Prettier, Draw.io Integration, Jira) and Claude Code. Join Jira with the same email as git config user.email.
+Done when: every work item in this epic is Done."
+E3,Epic,"College admin, licensing and usage",Sangay,,,,,"All work for College admin, licensing and usage.
 
-Done when: the tools open the repo and Jira shows your account with your git email"
-GitHub Actions quickstart in a practice repo (Kezang),Task,Kezang,Setup,CI/CD and DevOps,,2026-10-05,"Create actions-practice, add .github/workflows/hello.yml from the guide, then add a failing step.
+Done when: every work item in this epic is Done."
+E4,Epic,"Deadlines, auto-submit and extensions",Sangay,,,,,"All work for Deadlines, auto-submit and extensions.
 
-Done when: Sangay has screenshots of a green and a red run"
-"Install VS Code, shared extensions and Claude Code (Sonam)",Task,Sonam,Setup,CI/CD and DevOps,,2026-10-05,"Install VS Code with the shared extensions (GitHub Pull Requests, Docker, Kubernetes, ESLint, Prettier, Draw.io Integration, Jira) and Claude Code. Join Jira with the same email as git config user.email.
+Done when: every work item in this epic is Done."
+E5,Epic,"Editor, Yjs, document tabs, offline",Sangay,,,,,"All work for Editor, Yjs, document tabs, offline.
 
-Done when: the tools open the repo and Jira shows your account with your git email"
-GitHub Actions quickstart in a practice repo (Sonam),Task,Sonam,Setup,CI/CD and DevOps,,2026-10-05,"Create actions-practice, add .github/workflows/hello.yml from the guide, then add a failing step.
+Done when: every work item in this epic is Done."
+E6,Epic,Group tasks and rubric,Sangay,,,,,"All work for Group tasks and rubric.
 
-Done when: Sangay has screenshots of a green and a red run"
-"Install VS Code, shared extensions and Claude Code (Tshewang)",Task,Tshewang,Setup,CI/CD and DevOps,,2026-10-05,"Install VS Code with the shared extensions (GitHub Pull Requests, Docker, Kubernetes, ESLint, Prettier, Draw.io Integration, Jira) and Claude Code. Join Jira with the same email as git config user.email.
+Done when: every work item in this epic is Done."
+E7,Epic,PostgreSQL,Sangay,,,,,"All work for PostgreSQL.
 
-Done when: the tools open the repo and Jira shows your account with your git email"
-GitHub Actions quickstart in a practice repo (Tshewang),Task,Tshewang,Setup,CI/CD and DevOps,,2026-10-05,"Create actions-practice, add .github/workflows/hello.yml from the guide, then add a failing step.
+Done when: every work item in this epic is Done."
+E8,Epic,OpenAI analysis and reports,Sangay,,,,,"All work for OpenAI analysis and reports.
 
-Done when: Sangay has screenshots of a green and a red run"
-"Install VS Code, shared extensions and Claude Code (Ngawang)",Task,Ngawang,Setup,CI/CD and DevOps,,2026-10-05,"Install VS Code with the shared extensions (GitHub Pull Requests, Docker, Kubernetes, ESLint, Prettier, Draw.io Integration, Jira) and Claude Code. Join Jira with the same email as git config user.email.
+Done when: every work item in this epic is Done."
+E9,Epic,Grading and lecturer tools,Sangay,,,,,"All work for Grading and lecturer tools.
 
-Done when: the tools open the repo and Jira shows your account with your git email"
-GitHub Actions quickstart in a practice repo (Ngawang),Task,Ngawang,Setup,CI/CD and DevOps,,2026-10-05,"Create actions-practice, add .github/workflows/hello.yml from the guide, then add a failing step.
+Done when: every work item in this epic is Done."
+E10,Epic,Privacy and data policy,Sangay,,,,,"All work for Privacy and data policy.
 
-Done when: Sangay has screenshots of a green and a red run"
-Create Jira site and PEER Scrum project,Task,Sangay,Setup,CI/CD and DevOps,,2026-10-03,"Free plan, site peerlytics, Scrum project Peerlytics with key PEER, invite the four builders, columns To Do, In Progress, In Review, Done.
+Done when: every work item in this epic is Done."
+E11,Epic,Security,Sangay,,,,,"All work for Security.
 
-Done when: the board has the four columns and all members are invited"
-Create sprints and epics in Jira,Task,Sangay,Setup,CI/CD and DevOps,,2026-10-03,"One sprint per phase with the dates and goals from the guide, and the 17 epics.
+Done when: every work item in this epic is Done."
+E12,Epic,CI/CD and DevOps,Sangay,,,,,"All work for CI/CD and DevOps.
 
-Done when: all six sprints and 17 epics exist"
-Connect GitHub for Jira and add the merge automation,Task,Sangay,Setup,CI/CD and DevOps,,2026-10-03,"Install GitHub for Jira, connect the repo, and add one rule: pull request merged moves the linked issue to Done.
+Done when: every work item in this epic is Done."
+E13,Epic,Kubernetes and IaC,Sangay,,,,,"All work for Kubernetes and IaC.
 
-Done when: a PR titled PEER-1 Test link shows in the Development panel of PEER-1, and merging moves it to Done"
-Branch protection for develop and main,Task,Sangay,Setup,CI/CD and DevOps,,2026-10-03,"Run scripts/setup-github.sh: require a PR, 1 approval and the CI and Jira-key checks. Only Sangay merges to main and creates v* tags.
+Done when: every work item in this epic is Done."
+E14,Epic,Monitoring and backups,Sangay,,,,,"All work for Monitoring and backups.
 
-Done when: a direct push to main or develop is refused, and a PR needs the checks plus an approval"
-Create staging and production environments,Task,Sangay,Setup,CI/CD and DevOps,,2026-10-03,"staging deploys from develop. production deploys from v* tags with Sangay as required reviewer.
+Done when: every work item in this epic is Done."
+E15,Epic,Notifications and push,Sangay,,,,,"All work for Notifications and push.
 
-Done when: both environments exist and production asks Sangay to approve"
-Add GitHub Actions secrets and connect Snyk,Task,Sangay,Setup,Security,,2026-10-03,"Add every secret in the Reference table of the guide. Create the Snyk account and import the repo.
+Done when: every work item in this epic is Done."
+E16,Epic,UI polish and tests,Sangay,,,,,"All work for UI polish and tests.
 
-Done when: gh secret list shows all secrets and Snyk shows the repo"
-Write the shared CLAUDE.md,Task,Sangay,Setup,CI/CD and DevOps,,2026-10-03,"Run /init, then append the Peerlytics rules block from the guide.
+Done when: every work item in this epic is Done."
+E17,Epic,Report and presentation,Sangay,,,,,"All work for Report and presentation.
 
-Done when: CLAUDE.md is merged"
-Repo audit (docs/audit.md),Task,Sangay,Setup,CI/CD and DevOps,,2026-10-05,"Prompt S1: what exists, problems, and done, partly done or missing for each feature. No code changes.
+Done when: every work item in this epic is Done."
+E18,Epic,Project setup and sign-offs,Sangay,,,,,"All work for Project setup and sign-offs.
 
-Done when: docs/audit.md is merged and the team has read it"
-Jira import file and import,Task,Sangay,Setup,CI/CD and DevOps,,2026-10-05,"Prompt S2: jira-import.csv with one row per step, then import it with the Jira CSV importer.
+Done when: every work item in this epic is Done."
+T1,Task,0.1 Set up Jira,Sangay,E18,phase-0,lo4,2026-10-03,"Jira Free site peerlytics, team-managed Scrum project PEER, columns To Do, In Progress, In Review, Done, the four builders invited, epics and work items imported, GitHub for Jira connected, one automation rule.
 
-Done when: every step is an issue in the right sprint and epic"
-Sign in with Google,Story,Kezang,Phase 1 - Kezang,Login and roles,,2026-10-06,"Add Google sign-in with Firebase Auth next to email sign-in.
+Done when: Jira project PEER has 18 epics, every step as a work item, Sprint 4 and Sprint 5, and the GitHub link working."
+T2,Task,0.2 GitHub settings and secrets,Sangay,E12,phase-0,lo3,2026-10-03,"Branch protection on develop and main, staging and production environments, v* tag rule, Actions secrets, Snyk account connected (scripts/setup-github.sh).
 
-Done when: a student signs in with Google and lands on My courses"
-Four roles with Firebase custom claims,Story,Kezang,Phase 1 - Kezang,Login and roles,,2026-10-06,"superAdmin, collegeAdmin, lecturer and student as custom claims. Users can no longer set their own role (audit problem 1).
+Done when: branch protection, the production environment and all secrets are in place."
+T3,Task,0.3 Shared CLAUDE.md,Sangay,E18,phase-0,lo4,2026-10-03,"Run /init, then append the Peerlytics rules from the guide.
 
-Done when: each role sees only its own screens and a student cannot make themselves a lecturer"
-Backend checks the Firebase ID token on every request,Task,Kezang,Phase 1 - Kezang,Security,,2026-10-06,"Express middleware verifies the ID token and role on every route except /health (audit problem 4).
+Done when: CLAUDE.md is in the repo root with the Peerlytics rules."
+T4,Task,0.4 Repo audit,Sangay,E18,phase-0,lo4,2026-10-05,"Prompt S1: docs/audit.md with what exists, problems, and done, partly done or missing for each feature.
 
-Done when: requests without a valid token get 401 and tests cover each role"
-Server-side deadlines and auto-submit,Story,Kezang,Phase 1 - Kezang,"Deadlines, auto-submit and extensions",,2026-10-06,"Move auto-submit from the browser to the server so it happens even when no tab is open.
+Done when: docs/audit.md is written with the real Jira key PEER, and the epics and work items are in Jira."
+T5,Task,0.5 First workflows,Tshewang,E12,phase-0,lo7,2026-10-04,"Prompt T0: ci.yml and the Jira key check on every PR, lint, test and test:rules scripts, pinned actions, CI badge. Keep the existing job names, which branch protection requires.
 
-Done when: an assignment is submitted at its deadline with every browser closed"
-PostgreSQL schema and migrations,Task,Kezang,Phase 1 - Kezang,PostgreSQL,,2026-10-06,"Tables: colleges, courses, enrolments, assignments, submissions, analysis_results, grades, overrides, audit_log.
+Done when: ci.yml and the Jira key check run on every PR."
+T6,Task,0.6 Docker for the backend,Sonam,E13,phase-0,lo6,2026-10-04,"Prompt SO0: Dockerfile for backend/ (Node 22, non-root, /health healthcheck) and a root docker-compose.yml with PostgreSQL.
 
-Done when: migrations run on a fresh database and integration tests use a real PostgreSQL"
-analysis_results write-once trigger,Task,Kezang,Phase 1 - Kezang,PostgreSQL,,2026-10-06,"A database trigger blocks UPDATE and DELETE on analysis_results.
+Done when: everyone can run docker compose up."
+T7,Task,1.1 Tidy the backend,Sonam,E11,phase-1,lo5,2026-10-04,"Prompt SO1: organise backend/ into routes, services and config, settings from env vars, /health, Zod on every route, lint and test scripts.
 
-Done when: an UPDATE or DELETE fails and a test proves it"
-Course site with tabs,Story,Sonam,Phase 2 - Sonam,Courses and course site,,2026-10-08,"Course page with Overview (announcements), Assignments, Groups, Members and Grades.
+Done when: backend/ is organised, settings come from .env, /health answers and every route has Zod checks."
+T8,Story,1.2 Google sign-in and four roles,Kezang,E1,phase-1,lo5,2026-10-04,"Prompt K1: Google sign-in next to email login; role as a Firebase custom claim set by the backend.
 
-Done when: a lecturer creates a course and students see all five tabs"
-Join a course with a join code,Story,Sonam,Phase 2 - Sonam,Courses and course site,,2026-10-08,"Students join with a code or an invite.
+Done when: a Google login gets a role claim set by the backend and nobody can raise their own role."
+T9,Story,1.3 Google button and clean-up,Ngawang,E1,phase-1,lo5,2026-10-04,"Prompt NG1: Continue with Google button, frontend bugs from the audit, sample data removed, unused prototype files moved to archive/.
 
-Done when: a student enters a code and appears in Members"
-OpenAI analysis with Hugging Face and VWT fallback,Story,Sonam,Phase 2 - Sonam,OpenAI analysis and reports,,2026-10-08,"The backend uses OpenAI for AI likelihood, writing quality, difficulty and feedback. The ai_provider flag switches to Hugging Face and VWT.
+Done when: Continue with Google is on login and signup, the audit bugs are fixed and no sample data is left."
+T10,Task,1.4 Backend checks every login,Tshewang,E11,phase-1,lo8,2026-10-05,"Prompt T1: Firebase ID token middleware, requireRole, Helmet, CORS allow-list, safe error handler.
 
-Done when: both providers work behind the flag and tests stub them"
-Locked analysis results,Story,Sonam,Phase 2 - Sonam,OpenAI analysis and reports,,2026-10-08,"Store each analysis once in analysis_results. Students can no longer edit reports (audit problem 2).
+Done when: no token gets 401, a bad token gets 401 and a wrong role gets 403."
+T11,Task,1.5 PostgreSQL tables,Sonam,E7,phase-1,lo5,2026-10-05,"Prompt SO7: migrations for colleges, licences, users, courses, enrolments, assignments, workspaces, submissions, analysis_results, grades, overrides, audit_log.
 
-Done when: a student cannot change a report after submitting"
-Group tasks,Story,Sonam,Phase 2 - Sonam,Group tasks and rubric,,2026-10-08,"Groups create and assign tasks. The Tasks score is the share of the tasks of a student done by the deadline (audit problem 6).
+Done when: migrations run up and down and the results trigger blocks changes."
+T12,Story,1.6 Deadlines enforced on the server,Kezang,E4,phase-1,lo5,2026-10-05,"Prompt K2: a scheduled backend job submits and locks workspaces past their deadline, safe if the browser also submits.
 
-Done when: the Tasks score comes from real task data"
-Rubric weights per assignment,Story,Sonam,Phase 2 - Sonam,Group tasks and rubric,,2026-10-08,"The lecturer sets Time, Edits, Writing and Tasks weights (default 0.25 each). Grading runs on the server (audit problem 3).
+Done when: a deadline passes with every tab closed and the workspace still submits and locks."
+T13,Story,1.7 Course site layouts,Ngawang,E2,phase-1,lo5,2026-10-05,"Prompt NG6: My courses, Join a course, and the course page with Overview, Assignments, Groups, Members and Grades tabs.
 
-Done when: changing the weights changes the suggested grade and tests cover it"
-CSV grade export,Story,Sonam,Phase 2 - Sonam,Grading and lecturer tools,,2026-10-08,"Export the grades and overrides of a course to CSV.
+Done when: the course pages and five tabs are laid out (data comes in 2.6)."
+T14,Task,1.8 Firestore rules and tests,Kezang,E11,phase-1,lo8,2026-10-06,"Prompt K3: tighten firestore.rules and add rules tests on the emulator.
 
-Done when: the CSV opens in a spreadsheet with one row per student"
-XML and XSLT report export,Story,Sonam,Phase 2 - Sonam,Grading and lecturer tools,,2026-10-08,"Export a report as XML with an XSLT stylesheet.
+Done when: members only; lecturers only after submission; results create-once; rules tests green."
+T15,Task,1.9 Staging deploy,Tshewang,E12,phase-1,lo6,2026-10-06,"Prompt T2: build-images.yml and deploy-staging.yml.
 
-Done when: the XML renders as a styled report in a browser"
-Real-time co-editing with Yjs and Hocuspocus,Story,Sonam,Phase 2 - Sonam,"Editor, Yjs, document tabs, offline",,2026-10-08,"collab/ server with Hocuspocus. TipTap uses Yjs, behind a feature flag.
+Done when: every merge to develop builds the images and updates the staging server."
+T16,Task,1.10 Phase 1 sign-off,Sangay,E18,phase-1,lo4,2026-10-06,"Run the Phase 1 demo checklist on staging; tag v0.1.
 
-Done when: two browsers edit the same document live without losing text"
-Document tabs and sub-tabs,Story,Sonam,Phase 2 - Sonam,"Editor, Yjs, document tabs, offline",,2026-10-08,"Each tab is its own XmlFragment in the Yjs document, behind a feature flag.
+Done when: the demo passed, the evidence is the merged PRs and Actions runs, and v0.1 is tagged."
+T17,Story,2.1 Courses and enrolment API,Sonam,E2,phase-2,lo5,2026-10-06,"Prompt SO8: course, announcement, assignment, group and grades routes, with integration tests and backend/openapi.yaml.
 
-Done when: a user adds, renames and nests tabs and others see them live"
-Security hardening,Task,Tshewang,Phase 3 - Tshewang,Security,,2026-10-11,"Zod for request bodies, Ajv for external results and tracking events, rate limits, and a Firestore rules review.
+Done when: courses, join codes, announcements, assignments, groups and the grades list work through the API."
+T18,Story,2.2 Yjs co-editing,Kezang,E5,phase-2,lo5,2026-10-06,"Prompt K6: Hocuspocus server in collab/ and TipTap collaboration, old sync behind yjs_enabled.
 
-Done when: invalid input gets 400 and the security problems in the audit are closed"
-College admin screens,Story,Tshewang,Phase 3 - Tshewang,"College admin, licensing and usage",,2026-10-11,"collegeAdmin manages lecturers and courses for their college.
+Done when: two people type in the same sentence and nothing is lost; the old sync still works behind the flag."
+T19,Story,2.3 Document tabs data,Kezang,E5,phase-2,lo5,2026-10-07,"Prompt K9: tabs and sub-tabs as Y.XmlFragments, behind doc_tabs_enabled.
 
-Done when: a college admin adds a lecturer who can then create courses"
-Licensing and usage,Story,Tshewang,Phase 3 - Tshewang,"College admin, licensing and usage",,2026-10-11,"Licence limits per college and a usage view, behind a feature flag.
+Done when: tabs and sub-tabs sync live, and the analysis and report keep the tab titles."
+T20,Story,2.4 OpenAI analysis with a backup,Sonam,E8,phase-2,lo5,2026-10-07,"Prompt SO2: OpenAI as the main provider on the backend, Ajv-checked replies, Hugging Face and VWT as backup via ai_provider.
 
-Done when: usage counts are shown and limits are enforced"
-Email-domain sign-in,Story,Tshewang,Phase 3 - Tshewang,Login and roles,,2026-10-11,"Only allowed college email domains can sign up.
+Done when: submitting gives an OpenAI report, switching ai_provider to legacy still works, and raw results are locked."
+T21,Task,2.5 Email reminders in their own container,Sangay,E15,phase-2,lo6,2026-10-07,"Prompt S3: move the existing reminders into notifier/ with a sent-log, /health and a Dockerfile, wording and timing unchanged.
 
-Done when: an address from another domain is refused"
-Security scans in CI (Snyk),Task,Tshewang,Phase 3 - Tshewang,CI/CD and DevOps,,2026-10-11,"Snyk for packages, code, Docker images and Kubernetes files in security.yml.
+Done when: notifier/ runs as its own Docker service, reminders use assignment deadlines and nothing is sent twice."
+T22,Story,2.6 Connect the course site,Ngawang,E2,phase-2,lo5,2026-10-07,"Prompt NG6, Phase 2 part: connect the layouts to the routes in backend/openapi.yaml.
 
-Done when: the scan runs on every PR and high issues fail it"
-Offline editing,Story,Tshewang,Phase 3 - Tshewang,"Editor, Yjs, document tabs, offline",,2026-10-11,"Edits made offline sync when back online, behind a feature flag.
+Done when: the course pages from 1.7 show real data from the API."
+T23,Task,2.7 Analysis limits and database tests in CI,Tshewang,E11,phase-2,lo8,2026-10-07,"Prompt T3: per-user limits on analysis with Retry-After, Zod on the new routes; switch on the integration job.
 
-Done when: text typed offline appears for others after reconnecting"
-CSV invite,Story,Tshewang,Phase 3 - Tshewang,Courses and course site,,2026-10-11,"The lecturer uploads a CSV of student emails to invite, behind a feature flag.
+Done when: too many analysis requests get 429 with a wait time, and the integration job in ci.yml is green."
+T24,Story,"2.8 Grading, group tasks, rubric, CSV",Sonam,E6,phase-2,lo5,2026-10-08,"Prompts SO3 and SO9: grading module in backend/grading/, tasks table and routes, rubric weights, grades CSV.
 
-Done when: everyone in the CSV gets an invite"
-Random groups,Story,Tshewang,Phase 3 - Tshewang,Courses and course site,,2026-10-11,"The lecturer splits enrolled students into random groups of a chosen size.
+Done when: grades use tasks and per-assignment weights, and grades download as a CSV."
+T25,Story,2.9 Task board and report buttons,Ngawang,E9,phase-2,lo5,2026-10-08,"Prompts NG10 and NG2: Tasks panel in the workspace; Download XML, Print report and override history.
 
-Done when: groups are created with no student left out"
-Push notifications,Story,Tshewang,Phase 3 - Tshewang,Notifications and push,,2026-10-11,"notifier/ sends deadline and grade push notifications, behind a feature flag.
+Done when: groups assign and tick tasks; lecturers download XML, print the report and see override history."
+T26,Story,2.10 XML and XSLT report,Sonam,E8,phase-2,lo1,2026-10-08,"Prompt SO4: report.xml route with an XSD, and report.xsl with XPath totals.
 
-Done when: a student gets a push before a deadline"
-UI polish pass,Task,Ngawang,Phase 4 - Ngawang,UI polish and tests,,2026-10-13,"Consistent spacing, empty states, loading and error states.
+Done when: the report downloads as XML, validates against its XSD and prints through XSLT."
+T27,Task,2.11 Phase 2 sign-off,Sangay,E18,phase-2,lo4,2026-10-08,"Run the Phase 2 demo checklist on staging; tag v0.2.
 
-Done when: no screen shows raw errors or blank areas"
-Privacy notice,Story,Ngawang,Phase 4 - Ngawang,Privacy and data policy,,2026-10-13,"docs/privacy-notice.md and an in-app page: what is tracked (time, counts, paste events, versions) and what is not.
+Done when: the demo passed, the evidence is the merged PRs and Actions runs, and v0.2 is tagged."
+T28,Task,3.1 Security features,Tshewang,E11,phase-3,lo8,2026-10-09,"Prompt T4: rate limits, Turnstile CAPTCHA, access-policy module, licence checks, bot flags, audit log and alerts.
 
-Done when: the notice is linked from sign-up and matches what the code records"
-Deadline extensions,Story,Ngawang,Phase 4 - Ngawang,"Deadlines, auto-submit and extensions",,2026-10-13,"The lecturer grants an extension to a student or group.
+Done when: rate limits, CAPTCHA, access rules for every role, licence limits, bot flags, audit log and alerts work."
+T29,Story,3.2 Offline editing,Kezang,E5,phase-3,lo5,2026-10-09,"Prompt K7: y-indexeddb, offline badge, queued tracking events, behind offline_enabled.
 
-Done when: an extended student is not auto-submitted at the original deadline"
-Inline feedback,Story,Ngawang,Phase 4 - Ngawang,Grading and lecturer tools,,2026-10-13,"The lecturer comments on parts of a submitted document.
+Done when: a student edits with no internet, reconnects, and the changes appear for the group."
+T30,Task,3.3 Ansible and Postman,Sonam,E13,phase-3,lo6,2026-10-09,"Prompt SO5: Ansible playbook for a fresh VPS with k3s; Postman collection run in CI with Newman.
 
-Done when: the student sees comments anchored to their text"
-Course dashboard,Story,Ngawang,Phase 4 - Ngawang,Grading and lecturer tools,,2026-10-13,"Lecturer overview of submissions, grades and flags for a course.
+Done when: Ansible sets up a fresh VPS with k3s and the Postman collection runs in CI."
+T31,Story,3.4 Security on the pages,Ngawang,E11,phase-3,lo8,2026-10-09,"Prompt NG3: Turnstile widget, friendly 429 message, bot flags in the lecturer view, sanitised editor HTML.
 
-Done when: a lecturer sees the status of every group on one page"
-Peer evaluation,Story,Ngawang,Phase 4 - Ngawang,Grading and lecturer tools,,2026-10-13,"Students rate the contribution of their group members.
+Done when: the CAPTCHA shows, a 429 gives a friendly wait message, and bot flags appear in the lecturer view."
+T32,Task,3.5 Security scans in the pipeline,Tshewang,E11,phase-3,lo8,2026-10-10,"Prompt T5: security.yml with Gitleaks and Snyk, a ZAP baseline scan of staging, saved reports.
 
-Done when: ratings are collected and shown to the lecturer"
-.docx export,Story,Ngawang,Phase 4 - Ngawang,"Editor, Yjs, document tabs, offline",,2026-10-13,"Export a document to .docx, behind a feature flag.
+Done when: a planted fake secret fails the pipeline, Snyk reports are saved and ZAP scans staging."
+T33,Story,3.6 CSV invite and college email sign-in,Kezang,E2,phase-3,lo5,2026-10-10,"Prompts K8 and K10: CSV class invite behind csv_invite_enabled; allowed email domains per college.
 
-Done when: the file opens in Word with headings and formatting intact"
-End-to-end tests,Task,Ngawang,Phase 4 - Ngawang,UI polish and tests,,2026-10-13,"E2E tests for sign-in, submit and grade override.
+Done when: a class is invited from a CSV and outside emails can't join a domain-restricted college."
+T34,Story,3.7 Random groups and peer evaluation,Sonam,E6,phase-3,lo5,2026-10-10,"Prompt SO10 parts 1 and 2: random groups route and peer evaluation.
 
-Done when: E2E tests run in CI and pass"
-Staging on k3s,Task,Ngawang,Phase 4 - Ngawang,Kubernetes and IaC,,2026-10-13,"Kubernetes manifests and deploy-staging.yml. develop deploys to staging.
+Done when: random groups are created and notified, and students can rate teammates after submission."
+T35,Story,3.8 Push notifications,Sangay,E15,phase-3,lo5,2026-10-10,"Prompt S5: FCM push from notifier/ for reminders and submission alerts, invalid tokens removed, behind push_enabled.
 
-Done when: merging to develop updates staging automatically"
-Feature flags with Remote Config,Task,Ngawang,Phase 4 - Ngawang,CI/CD and DevOps,,2026-10-13,"Every advanced feature reads its flag from Firebase Remote Config.
+Done when: a deadline reminder also arrives as a push notification."
+T36,Story,3.9 College admin dashboard and document tabs panel,Ngawang,E3,phase-3,lo5,2026-10-10,"Prompts NG7 and NG9: collegeAdmin and superAdmin dashboard; document tabs side panel behind doc_tabs_enabled.
 
-Done when: turning a flag off hides the feature without a deploy"
-Release v1.0 to production,Task,Sangay,Phase 5 - Release,CI/CD and DevOps,,2026-10-15,"Tag v1.0. The production workflow deploys after Sangay approves.
+Done when: college admins see their college, and documents show a tabs side panel."
+T37,Story,3.10 Usage data,Tshewang,E3,phase-3,lo5,2026-10-11,"Prompt T8 part 1: record OpenAI calls and daily active users; GET /colleges/:id/usage.
 
-Done when: v1.0 is live in production"
-Monitoring with Prometheus and Grafana,Task,Sangay,Phase 5 - Release,Monitoring and backups,,2026-10-15,"Metrics, dashboards and alert emails.
+Done when: college admins see OpenAI spend and active users."
+T38,Story,3.10 Rubric editor and random groups button,Ngawang,E6,phase-3,lo5,2026-10-11,"Prompt NG11: rubric weight editor, Make random groups, usage charts in the college admin dashboard.
 
-Done when: an alert email arrives when the API is down"
-Public status page (Uptime Kuma),Task,Sangay,Phase 5 - Release,Monitoring and backups,,2026-10-15,"Status page for the website and the API.
+Done when: lecturers edit rubric weights and make random groups."
+T39,Task,3.11 Phase 3 sign-off,Sangay,E18,phase-3,lo4,2026-10-11,"Run the Phase 3 demo checklist on staging; tag v0.3.
 
-Done when: the status page is public and shows both services"
-Backup restore drill,Task,Sangay,Phase 5 - Release,Monitoring and backups,,2026-10-15,"Restore PostgreSQL and Firestore from backup to a test environment.
+Done when: the demo passed, the evidence is the merged PRs and Actions runs, and v0.3 is tagged."
+T40,Task,4.1 Kubernetes files,Sonam,E13,phase-4,lo6,2026-10-11,"Prompt SO6: Deployments, Services, Ingress, PostgreSQL StatefulSet with backup CronJob, blue/green backend, kustomize overlays.
 
-Done when: the restored data matches and the steps are written down"
-Final report and presentation,Task,Sangay,Phase 5 - Release,Report and presentation,,2026-10-15,"The report, which says Claude Code was used, and the slides.
+Done when: backend, collab, notifier and PostgreSQL run on k3s staging with a nightly database backup."
+T41,Task,4.2 Feature flags,Kezang,E12,phase-4,lo6,2026-10-11,"Prompt K4: Firebase Remote Config flags with safe defaults, read everywhere, documented in docs/feature-flags.md.
 
-Done when: the report is submitted and the presentation is rehearsed"
+Done when: switching any flag off hides that feature cleanly, and docs/feature-flags.md lists them all."
+T42,Task,4.3 Staging on k3s and load test,Tshewang,E13,phase-4,lo6,2026-10-12,"Prompt T6: deploy-staging.yml to k3s, snyk iac test, k6 load test.
+
+Done when: merges deploy to k3s staging, the Kubernetes files are scanned and load test results are saved."
+T43,Story,"4.4 Polish, Word export, push permission",Ngawang,E16,phase-4,lo5,2026-10-12,"Prompts NG4 and NG8: layout, Dzongkha, accessibility; Word export behind docx_export_enabled; push permission behind push_enabled.
+
+Done when: every page works on phone and laptop, Dzongkha is complete, and Word export and push permission work."
+T44,Task,4.5 Privacy notice and data policy,Sangay,E10,phase-4,lo8,2026-10-12,"Prompt S6: docs/privacy-notice.md and docs/data-policy.md, checked against every place the code collects data.
+
+Done when: both documents are written and checked against the code."
+T45,Story,4.6 Extensions and inline feedback,Kezang,E4,phase-4,lo5,2026-10-12,"Prompt K11: per-group deadline extensions; inline lecturer comments after submission; rules tests extended.
+
+Done when: an extended group can still edit after the normal deadline, and lecturer comments appear for the group after grading."
+T46,Story,4.7 Course comparison data,Sonam,E9,phase-4,lo5,2026-10-12,"Prompt SO10 part 3: GET /courses/:id/comparison.
+
+Done when: the route returns every group's balance, AI and paste levels, and grades."
+T47,Story,"4.8 Privacy screen, course dashboard, peer evaluation, E2E",Ngawang,E16,phase-4,lo7,2026-10-13,"Prompts NG12 and NG5: privacy notice on first login, course-wide dashboard, peer evaluation form, Playwright E2E in CI.
+
+Done when: the privacy notice shows on first login, lecturers compare all groups, students rate teammates, and the e2e job is green."
+T48,Story,4.9 Data deletion,Tshewang,E10,phase-4,lo8,2026-10-13,"Prompt T8 part 2: Delete my account and Delete course data, following docs/data-policy.md.
+
+Done when: Delete my account and Delete course data work as the data policy says."
+T49,Task,4.10 Phase 4 sign-off and decisions,Sangay,E18,phase-4,lo4,2026-10-13,"Run the Phase 4 demo on k3s staging; decide k3s or docker-compose for production and what to cut; tag v0.4.
+
+Done when: the demo passed, Sprint 4 is completed, the burndown chart is saved and v0.4 is tagged."
+T50,Task,5.1 Production deploy: rolling and blue/green,Tshewang,E12,phase-5,lo6,2026-10-14,"Prompt T7: deploy-production.yml and infra/scripts/bluegreen.sh with --rollback.
+
+Done when: a v* tag waits for Sangay's approval, then deploys with no downtime, and rollback is one command."
+T51,Task,5.2 Production setup and restore script,Sonam,E14,phase-5,lo6,2026-10-14,"Prompt SO11: infra/scripts/restore-drill.sh and docs/restore-drill.md.
+
+Done when: production runs with nightly backups, Ansible reruns on a fresh server, and restore-drill.sh passes."
+T52,Task,5.3 Monitoring and alerts,Kezang,E14,phase-5,lo6,2026-10-14,"Prompt K5: Prometheus and Grafana on k3s, /metrics routes, alert emails.
+
+Done when: Grafana shows requests, errors and response time, and killing a pod sends an alert email."
+T53,Task,5.4 Acceptance test,Sangay,E16,phase-5,lo4,2026-10-14,"Prompt S4: docs/acceptance-test.md covering every phase demo; run it on staging.
+
+Done when: every line of docs/acceptance-test.md passes on staging and the report sections are collected."
+T54,Task,5.5 Restore-drill workflow,Tshewang,E14,phase-5,lo6,2026-10-15,"restore-drill.yml runs the restore script every Sunday night and on Run workflow.
+
+Done when: restore-drill.yml runs green once by hand."
+T55,Task,5.5 Public status page,Kezang,E14,phase-5,lo6,2026-10-15,"Prompt K12: Uptime Kuma on k3s with a public status page and email alerts.
+
+Done when: the public status page is live."
+T56,Task,5.6 Slides and last fixes,Ngawang,E17,phase-5,,2026-10-15,"Design the slides; fix the last UI bugs from the acceptance test.
+
+Done when: the slides are done and the last UI bugs from the acceptance test are fixed."
+T57,Task,5.7 Release v1.0,Sangay,E12,phase-5,lo6,2026-10-15,"Code freeze, merge develop into main, tag v1.0, approve the production deploy, live demo, backup video, rehearsal.
+
+Done when: v1.0 is in production, the live demo works, Sprint 5 is completed and the report is merged."
+T58,Task,R1 Report: introduction,Sangay,E17,report,,2026-10-06,"Write the report introduction.
+
+Done when: the introduction is in the shared report."
+T59,Task,R2 Report: method,Sangay,E17,report,,2026-10-10,"Write the method section, including that Jira started on 13 Oct and that Claude Code was used.
+
+Done when: the method section is in the shared report."
+T60,Task,R3 Report: case formation method,Kezang,E17,report,,2026-10-10,"Write the case formation method part.
+
+Done when: the part is in the shared report."
+T61,Task,"R4 Report: background, content and fairness results",Sonam,E17,report,,2026-10-14,"Write the case formation background and the content and fairness results.
+
+Done when: the parts are in the shared report."
+T62,Task,R5 Report: security and pipeline,Tshewang,E17,report,,2026-10-14,"Write the security and pipeline part, including the security assessment from 3.5.
+
+Done when: the part is in the shared report."
+T63,Task,R6 Report: UI and testing,Ngawang,E17,report,,2026-10-14,"Write the UI and testing part.
+
+Done when: the part is in the shared report."
+T64,Task,R7 Report: references,Tshewang,E17,report,,2026-10-15,"Collect and format the references.
+
+Done when: the reference list is complete."
+T65,Task,R8 Report: conclusion and final merge,Sangay,E17,report,,2026-10-15,"Write the conclusion and merge everyone's sections into the final report.
+
+Done when: the final report is handed in."
+T66,Task,R9 Presentation rehearsal,Sangay,E17,report,,2026-10-15,"Timed rehearsal with mock questions; each member presents their slot.
+
+Done when: the team has rehearsed the full presentation on time."
