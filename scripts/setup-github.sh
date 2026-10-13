@@ -8,7 +8,7 @@ set -euo pipefail
 
 # ---- edit these if needed -------------------------------------------------
 # Check names must match the job names shown on a PR's Checks list exactly.
-CHECKS=("Website (lint, test, build)" "backend (lint, test)" "Jira key in PR title")
+CHECKS=("Website (lint, test, build)" "backend (lint, test)" "Firestore rules tests" "Jira key in PR title")
 # Who approves production deploys (default: the logged-in GitHub user).
 REVIEWER="${REVIEWER:-}"
 # ---------------------------------------------------------------------------
