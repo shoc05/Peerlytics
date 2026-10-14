@@ -10,7 +10,8 @@
     "dev:server": "node backend/server.js",
     "lint": "eslint src --ext .js,.jsx",
     "test": "node --test src/**/*.test.js",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-peerlytics \"node --test test/firestore.rules.test.js\""
+    "test:rules": "firebase emulators:exec --only firestore --project demo-peerlytics \"node --test test/firestore.rules.test.js\"",
+    "test:auth": "firebase emulators:exec --only auth,firestore --project demo-peerlytics \"node --test backend/src/auth/auth.emulator.itest.js\""
   },
   "dependencies": {
     "@tiptap/extension-placeholder": "^2.6.6",

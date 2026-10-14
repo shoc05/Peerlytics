@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Logo from './Logo';
 import AuthAlert from './AuthAlert';
 import AuthThemeToggle from './AuthThemeToggle';
+import GoogleSignInButton from './GoogleSignInButton';
 import { signUp } from '../firebase/authService';
 import ClassSectionPicker from './ClassSectionPicker';
 import { useAuth } from '../context/AuthContext';
@@ -46,8 +47,8 @@ export default function Signup() {
     setSuccess('');
     setLoading(true);
     try {
-      const profile = await signUp({ email, password, name, role, classSection });
-      applyProfile(profile);
+      const sessionUser = await signUp({ email, password, name, role, classSection });
+      applyProfile(sessionUser);
       setSuccess('Account created successfully! Redirecting to dashboard…');
       setTimeout(() => navigate('/dashboard', { replace: true }), 600);
     } catch (err) {
@@ -125,6 +126,8 @@ export default function Signup() {
             {loading ? 'Creating account…' : 'Sign Up'}
           </button>
         </form>
+
+        <GoogleSignInButton darkMode={darkMode} disabled={loading} onError={setError} />
 
         <p style={{ textAlign: 'center', color: authSubtitleStyle(darkMode).color, fontSize: 13, marginTop: 20 }}>
           Already have an account?{' '}

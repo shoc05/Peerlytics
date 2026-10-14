@@ -1,62 +1,37 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { subscribeAuth } from '../firebase/authService';
-import { getUserProfile } from '../firebase/firestoreService';
+import { loadSessionUser, subscribeAuth } from '../firebase/authService';
+import { getFirebaseAuth } from '../firebase/config';
+import { buildSessionUser, roleFlags } from '../utils/authRole';
 
 const AuthContext = createContext(null);
-
-export function profileToUser(profile) {
-  if (!profile) return null;
-  return {
-    uid: profile.uid || profile.id,
-    email: profile.email,
-    name: profile.name,
-    role: profile.role,
-    groupId: profile.groupId,
-  };
-}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const applyProfile = useCallback((profile) => {
-    const next = profileToUser(profile);
-    if (next) setUser(next);
-    return next;
+  // Login/Signup/RolePicker pass the session user they already loaded.
+  const applyProfile = useCallback((sessionUser) => {
+    if (sessionUser) setUser(sessionUser);
+    return sessionUser;
   }, []);
 
-  const refreshProfile = useCallback(async (uid) => {
-    const profile = await getUserProfile(uid);
-    if (profile) {
-      applyProfile(profile);
-    }
-    return profile;
-  }, [applyProfile]);
+  // Re-read the profile (and the token, when forceRefresh) for the signed-in user.
+  const refreshProfile = useCallback(async ({ forceRefresh = false } = {}) => {
+    const fbUser = getFirebaseAuth()?.currentUser;
+    if (!fbUser) return null;
+    const next = await loadSessionUser(fbUser, { forceRefresh });
+    setUser(next);
+    return next;
+  }, []);
 
   useEffect(() => {
     const unsub = subscribeAuth(async (fbUser) => {
       if (fbUser) {
         try {
-          const profile = await getUserProfile(fbUser.uid);
-          if (profile) {
-            applyProfile(profile);
-          } else {
-            setUser({
-              uid: fbUser.uid,
-              email: fbUser.email || '',
-              name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
-              role: 'student',
-              groupId: null,
-            });
-          }
+          setUser(await loadSessionUser(fbUser));
         } catch {
-          setUser({
-            uid: fbUser.uid,
-            email: fbUser.email || '',
-            name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
-            role: 'student',
-            groupId: null,
-          });
+          // Profile unreadable: keep the user signed in but never assume a role.
+          setUser(buildSessionUser({ fbUser, claims: {}, profile: null }));
         }
       } else {
         setUser(null);
@@ -64,7 +39,7 @@ export function AuthProvider({ children }) {
       setLoading(false);
     });
     return unsub;
-  }, [applyProfile]);
+  }, []);
 
   const value = {
     user,
@@ -72,10 +47,7 @@ export function AuthProvider({ children }) {
     setUser,
     applyProfile,
     refreshProfile,
-    isLecturer: user?.role === 'lecturer',
-    isStudent: user?.role === 'student',
-    // Admin (set manually as role:'admin' in Firestore) audits how lecturers grade.
-    isAdmin: user?.role === 'admin',
+    ...roleFlags(user ? user.role : undefined),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
