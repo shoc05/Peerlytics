@@ -7,7 +7,7 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "lint": "eslint . --ext .js",
-    "test": "node --test services/reportGenerator.test.js",
+    "test": "node --test \"services/**/*.test.js\"",
     "test:mail": "node scripts/test-mail.js"
   },
   "dependencies": {

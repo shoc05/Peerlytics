@@ -24,6 +24,7 @@ import cron from 'node-cron';
 import nodemailer from 'nodemailer';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { maskEmail, maskEmailsIn } from './maskEmail.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -180,8 +181,9 @@ async function runReminderSweep() {
         deadlineMs,
       }).then(() => {
         sentLog.add(key);
-        console.log(`[reminders] emailed ${email} for "${g.name}" (deadline ${new Date(deadlineMs).toISOString()})`);
-      }).catch((err) => console.error(`[reminders] send to ${email} failed:`, err.message));
+        // Emails are masked so student addresses never land in server logs.
+        console.log(`[reminders] emailed ${maskEmail(email)} for "${g.name}" (deadline ${new Date(deadlineMs).toISOString()})`);
+      }).catch((err) => console.error(`[reminders] send to ${maskEmail(email)} failed:`, maskEmailsIn(err.message)));
     }
   }
 }
