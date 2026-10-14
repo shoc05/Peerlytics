@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "dev:server": "node backend/server.js",
-    "test": "node --test src/**/*.test.js"
+    "lint": "eslint src --ext .js,.jsx",
+    "test": "node --test src/**/*.test.js",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-peerlytics \"node --test test/firestore.rules.test.js\""
   },
   "dependencies": {
     "@tiptap/extension-placeholder": "^2.6.6",
@@ -23,10 +25,16 @@
     "recharts": "^2.15.4"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@firebase/rules-unit-testing": "^3.0.4",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.0.0",
     "autoprefixer": "^10.5.0",
+    "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "firebase-tools": "^15.33.0",
+    "globals": "^17.13.0",
     "postcss": "^8.5.15",
     "tailwindcss": "^3.4.19",
     "vite": "^4.4.0"

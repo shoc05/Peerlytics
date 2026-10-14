@@ -8,14 +8,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm install && (cd backend && npm install)   # two separate packages: root (frontend) and backend/
 npm run dev            # Vite dev server on :3000, proxies /api to :5000
 npm run dev:server     # Express API on :5000 (or: cd backend && npm run dev for --watch)
+npm run lint           # ESLint checks for the frontend
 npm test               # node:test, runs src/**/*.test.js (no Jest/Vitest)
+npm run test:rules     # Firestore rules tests in the local emulator
+cd backend && npm test # backend node:test suite
+cd backend && npm run lint
 node --test src/utils/scoring.test.js                                  # one file
 node --test --test-name-pattern="high AI alone" src/utils/scoring.test.js   # one test
 npm run build          # vite build -> dist/
 firebase deploy --only firestore:rules,firestore:indexes   # see DEPLOY-FIREBASE.md
 ```
 
-There is no ESLint config yet. CI (`.github/workflows/ci.yml`) runs lint only if a `lint` script exists, then tests and build; the backend job only syntax-checks with `node --check`. The CI job names are required status checks used by `scripts/setup-github.sh`, so renaming a job breaks branch protection.
+CI (`.github/workflows/ci.yml`) runs frontend and backend lint/tests, builds the frontend, and tests Firestore rules in the emulator. Its job names are required status checks used by `scripts/setup-github.sh`, so renaming a job breaks branch protection. `.github/workflows/jira-check.yml` checks the required PEER key prefix without connecting to Jira or requiring Jira credentials.
 
 Config: a single `.env` at the repo root serves both packages. Vite reads `VITE_*` (Firebase web config, `VITE_API_URL`); `backend/server.js` explicitly loads `../.env` for `HF_API_KEY`, `VWT_API_KEY`, `PORT`, `CORS_ORIGIN`, `FIREBASE_SERVICE_ACCOUNT`, `SMTP_*`. There is no `.env.example` yet.
 
