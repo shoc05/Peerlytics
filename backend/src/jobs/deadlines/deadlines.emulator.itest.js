@@ -1,13 +1,12 @@
 // The deadline sweep against the real Firestore emulator through the Admin SDK. Run from the
-// repo root:
-//   npx firebase emulators:exec --only firestore --project demo-peerlytics "node --test backend/src/jobs/deadlines/deadlines.emulator.itest.js"
+// repo root: npm run test:deadlines
 import assert from 'node:assert/strict';
 import { before, test } from 'node:test';
 import { getDeadlineDb } from './firestore.js';
 import { runDeadlineSweep } from './job.js';
 
 if (!process.env.FIRESTORE_EMULATOR_HOST) {
-  throw new Error('Run this inside `firebase emulators:exec --only firestore` (see the header).');
+  throw new Error('Run this through `npm run test:deadlines` so the Firestore emulator is up.');
 }
 
 const DEADLINE = Date.UTC(2026, 9, 20, 18, 0);
