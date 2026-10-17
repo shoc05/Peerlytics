@@ -54,3 +54,24 @@ test('the dashboard covers requests, errors and response time', () => {
   for (const t of ['Requests per second', 'Errors (5xx share of requests)', 'Response time p95']) assert.ok(titles.includes(t), t);
   assert.equal(new Set(dashboard.panels.map((p) => p.id)).size, dashboard.panels.length);
 });
+
+// ——— Status page (step 5.5) ———
+const kumaDir = new URL('uptime-kuma/', dir);
+
+test('the status page checks all four services every minute', () => {
+  const plan = JSON.parse(readFileSync(new URL('monitors.json', kumaDir), 'utf8'));
+  assert.equal(plan.interval, 60);
+  assert.deepEqual(plan.monitors.map((m) => m.name), ['Website', 'Backend API', 'Live editing (collab)', 'Notifications (notifier)']);
+  assert.ok(plan.monitors.find((m) => m.name === 'Backend API').url.endsWith('/api/health'));
+  assert.ok(plan.monitors.find((m) => m.name.startsWith('Live editing')).url.endsWith('/health'));
+});
+
+test('Uptime Kuma runs as one pinned pod with its data on a volume, and the Ingress is separate', () => {
+  const manifest = readFileSync(new URL('uptime-kuma.yaml', kumaDir), 'utf8');
+  assert.match(manifest, /image: louislam\/uptime-kuma:\d+\.\d+\.\d+/);
+  assert.match(manifest, /replicas: 1/);
+  assert.match(manifest, /type: Recreate/);
+  assert.match(manifest, /mountPath: \/app\/data/);
+  assert.doesNotMatch(manifest, /kind: Ingress/);
+  assert.match(readFileSync(new URL('ingress.yaml', kumaDir), 'utf8'), /kind: Ingress/);
+});

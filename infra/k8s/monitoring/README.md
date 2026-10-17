@@ -10,6 +10,7 @@ This sets up kube-prometheus-stack (Prometheus, Alertmanager, Grafana) on k3s in
 | `alert-rules.yaml` | Alerts: errors above 5% for 5 min, a pod restarting, the backend down |
 | `dashboards/peerlytics-overview.json` | Grafana dashboard: requests, errors, response time, live editing, restarts |
 | `kustomization.yaml` | Applies the monitors, the rules and the dashboard ConfigMap |
+| `uptime-kuma/` | Public status page with one-minute checks (step 5.5); see its README |
 
 ## Install
 
