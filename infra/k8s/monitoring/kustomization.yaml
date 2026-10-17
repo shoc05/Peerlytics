@@ -1,0 +1,15 @@
+# kubectl apply -k infra/k8s/monitoring   (after the Helm install, see README.md)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+resources:
+  - servicemonitors.yaml
+  - alert-rules.yaml
+configMapGenerator:
+  - name: peerlytics-dashboards
+    files:
+      - dashboards/peerlytics-overview.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"

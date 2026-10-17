@@ -8,6 +8,8 @@ import * as Y from 'yjs';
 import { documentName } from './access.js';
 import { createCollabServer, FIELD } from './server.js';
 import { createMemoryStorage } from './storage.js';
+import { createCollabMetrics } from './metrics.js';
+import { Registry } from 'prom-client';
 
 const TOKENS = {
   'tok-a': { uid: 'stu-a', role: 'student' },
@@ -43,6 +45,7 @@ async function start(w) {
     debounce: 50,
     timeout: 1000,
     log: { info() {}, error() {} },
+    metrics: createCollabMetrics({ registry: new Registry() }),
   });
   await server.listen();
   open.push(server);
@@ -246,4 +249,18 @@ test('edits made offline merge with everyone else\'s when the connection comes b
   await a.provider.connect();
   const merged = 'Online: Shared start. Written offline.';
   await until(() => paragraphText(a.document) === merged && paragraphText(b.document) === merged);
+});
+
+test('/metrics reports connections, refusals and open documents', async () => {
+  const server = await start(makeWorld());
+  const a = connect(server, 'tok-a');
+  await a.ready;
+  await assert.rejects(connect(server, 'tok-out').ready);
+  const res = await fetch(`http://127.0.0.1:${server.port}/metrics`);
+  const body = await res.text();
+  assert.equal(res.status, 200);
+  assert.match(body, /collab_connections_total\{app="peerlytics-collab"\} 1/);
+  assert.match(body, /collab_active_connections\{app="peerlytics-collab"\} 1/);
+  assert.match(body, /collab_open_documents\{app="peerlytics-collab"\} 1/);
+  assert.match(body, /collab_auth_refused_total\{reason="NOT_A_MEMBER",app="peerlytics-collab"\} 1/);
 });
