@@ -42,3 +42,15 @@ export function parseServerMessage(payload) {
     return null;
   }
 }
+
+/**
+ * The badge text for a live document (step 3.2):
+ *   offline (server unreachable, editing the device copy) -> "Offline — saved on this device"
+ *   online with changes not yet confirmed by the server  -> "Syncing…"
+ */
+export function syncLabel({ status, online = true, unsynced = 0 } = {}) {
+  if (status === 'connecting') return 'Connecting to live editing…';
+  if (status === 'offline' || (status === 'connected' && !online)) return 'Offline — saved on this device';
+  if (status === 'connected') return unsynced > 0 ? 'Syncing…' : 'Live editing';
+  return null;
+}

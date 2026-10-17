@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ySyncPluginKey } from 'y-prosemirror';
-import { collabUrl, cursorColor, documentName, isRemoteTransaction, parseServerMessage } from './collab.js';
+import { collabUrl, cursorColor, documentName, isRemoteTransaction, parseServerMessage, syncLabel } from './collab.js';
 
 test('document names match the collab server', () => {
   assert.equal(documentName('group-1', 'file-2'), 'group:group-1:file:file-2');
@@ -31,4 +31,13 @@ test('server messages: JSON with a type, or null', () => {
   assert.deepEqual(parseServerMessage('{"type":"seed"}'), { type: 'seed' });
   assert.equal(parseServerMessage('not json'), null);
   assert.equal(parseServerMessage('{"kind":"x"}'), null);
+});
+
+test('sync badge text', () => {
+  assert.equal(syncLabel({ status: 'offline', online: false }), 'Offline — saved on this device');
+  assert.equal(syncLabel({ status: 'connected', online: false }), 'Offline — saved on this device');
+  assert.equal(syncLabel({ status: 'connected', online: true, unsynced: 2 }), 'Syncing…');
+  assert.equal(syncLabel({ status: 'connected', online: true, unsynced: 0 }), 'Live editing');
+  assert.equal(syncLabel({ status: 'connecting', online: false }), 'Connecting to live editing…');
+  assert.equal(syncLabel({ status: 'off' }), null);
 });

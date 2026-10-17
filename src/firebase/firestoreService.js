@@ -319,7 +319,8 @@ export async function bumpMemberActivity(groupId, uid) {
   );
 }
 
-export async function savePasteEvent(groupId, { fileId, userId, userName, changeType, pasteRanges, contentSnippet }) {
+// `timestamp` is when the paste happened; events queued offline (src/collab) pass their own.
+export async function savePasteEvent(groupId, { fileId, userId, userName, changeType, pasteRanges, contentSnippet, timestamp = Date.now() }) {
   await addDoc(collection(db(), 'groups', groupId, 'pasteEvents'), {
     fileId,
     userId,
@@ -329,7 +330,7 @@ export async function savePasteEvent(groupId, { fileId, userId, userName, change
     // Keep enough of the pasted text to highlight the WHOLE block (was 500 → only part
     // of long pastes was stored/highlighted). 20k chars is well within Firestore limits.
     contentSnippet: (contentSnippet || '').slice(0, 20000),
-    timestamp: Date.now(),
+    timestamp,
     createdAt: serverTimestamp(),
   });
 }

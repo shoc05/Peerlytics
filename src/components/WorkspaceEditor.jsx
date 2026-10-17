@@ -8,6 +8,7 @@ import { HighlightMark } from './HighlightMark';
 import { collabExtensions } from '../collab/extensions';
 import { COLLAB_FIELD, isRemoteTransaction } from '../collab/collab';
 import { exportDocument } from '../collab/tabsExport';
+import SyncBadge from '../collab/SyncBadge';
 import Toolbar from './Toolbar';
 import './workspace-editor.css';
 
@@ -283,13 +284,7 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
         </div>
       </div>
       <div className="workspace-editor-status">
-        <span>
-          {readOnly
-            ? 'View only'
-            : collab
-              ? collab.synced ? 'Live editing' : 'Connecting to live editing…'
-              : 'Auto-save enabled'}
-        </span>
+        <span>{readOnly ? 'View only' : collab ? <SyncBadge collab={collab} /> : 'Auto-save enabled'}</span>
         <span>
           Page {currentPage}
           {pageCount > 1 ? ` of ${pageCount}` : ''}
