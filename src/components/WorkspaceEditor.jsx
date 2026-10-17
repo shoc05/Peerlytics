@@ -5,6 +5,8 @@ import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import Placeholder from '@tiptap/extension-placeholder';
 import { HighlightMark } from './HighlightMark';
+import { collabExtensions } from '../collab/extensions';
+import { isRemoteTransaction } from '../collab/collab';
 import Toolbar from './Toolbar';
 import './workspace-editor.css';
 
@@ -26,6 +28,8 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
     onTypingStart,
     onTypingStop,
     onPageChange,
+    // Live editing (src/collab/useCollab): the Yjs document is the content, not initialHtml.
+    collab = null,
   },
   ref
 ) {
@@ -74,17 +78,20 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
   // Set by the real paste handler so onUpdate can report the ACTUAL pasted text
   // (not a length-delta guess). Cleared after it's consumed.
   const pendingPasteRef = useRef(null);
+  // True while this client loads the old Firestore text into a new live document.
+  const seedingRef = useRef(false);
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      StarterKit.configure({ heading: { levels: [1, 2, 3] }, ...(collab ? { history: false } : {}) }),
       Underline,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Placeholder.configure({ placeholder }),
       HighlightMark,
+      ...(collab ? collabExtensions(collab) : []),
     ],
-    content: initialHtml || '<p></p>',
-    editable: !readOnly,
+    content: collab ? undefined : initialHtml || '<p></p>',
+    editable: !readOnly && (!collab || collab.synced),
     editorProps: {
       // Capture the real clipboard text on paste — this is the accurate pasted
       // fragment, regardless of where in the document it was inserted.
@@ -98,9 +105,17 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
         return false; // let TipTap perform the actual paste
       },
     },
-    onUpdate: ({ editor: ed }) => {
+    onUpdate: ({ editor: ed, transaction }) => {
       const html = ed.getHTML();
       const text = ed.getText();
+      // Another member's change (or the one-time seed) arriving through Yjs: keep the view in
+      // step, but don't count it as this student's edit, paste or writing time.
+      if (collab && (seedingRef.current || isRemoteTransaction(transaction))) {
+        lastLenRef.current = text.length;
+        onChange?.({ html, text, remote: true });
+        updatePages(ed);
+        return;
+      }
       const prevLen = lastLenRef.current;
       const delta = text.length - prevLen;
       // Prefer the real pasted text captured by handlePaste; fall back to delta.
@@ -142,7 +157,7 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
   }, [editor, updatePages, onPageChange]);
 
   useEffect(() => {
-    if (!editor || !storageKey) return;
+    if (!editor || !storageKey || collab) return;
     try {
       const raw = localStorage.getItem(storageKey);
       if (raw) {
@@ -157,11 +172,27 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
     } catch {
       /* ignore */
     }
-  }, [editor, storageKey, initialHtml, updatePages]);
+  }, [editor, storageKey, initialHtml, updatePages, collab]);
 
   useEffect(() => {
-    if (editor) editor.setEditable(!readOnly);
-  }, [editor, readOnly]);
+    if (editor) editor.setEditable(!readOnly && (!collab || collab.synced));
+  }, [editor, readOnly, collab]);
+
+  // First open of a file under live editing: the collab server asks one client to copy the
+  // text saved by the old sync into the new Yjs document.
+  useEffect(() => {
+    if (!editor || !collab) return undefined;
+    return collab.onSeed(async () => {
+      const html = await collab.loadSeedHtml?.().catch(() => '');
+      if (!html || !editor.isEmpty || editor.isDestroyed) return;
+      seedingRef.current = true;
+      try {
+        editor.commands.setContent(html);
+      } finally {
+        seedingRef.current = false;
+      }
+    });
+  }, [editor, collab]);
 
   useEffect(() => {
     if (!editor || !readOnly || !flaggedContent?.length) return;
@@ -195,7 +226,7 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
   // pushed imperatively via the `setContent` ref handle, guarded against active typing.
   const loadedKeyRef = useRef(null);
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || collab) return;
     if (loadedKeyRef.current === storageKey) return; // already loaded this document
     loadedKeyRef.current = storageKey;
     if (initialHtml && editor.getHTML() !== initialHtml) {
@@ -204,15 +235,16 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
       hasAppliedHighlights.current = false;
       updatePages(editor);
     }
-  }, [editor, storageKey, initialHtml, updatePages]);
+  }, [editor, storageKey, initialHtml, updatePages, collab]);
 
   useImperativeHandle(ref, () => ({
     getHTML: () => editor?.getHTML() ?? '',
     getText: () => editor?.getText() ?? '',
     getEditor: () => editor,
     getPageInfo: () => ({ current: currentPage, total: pageCount }),
+    // Under live editing Yjs owns the content, so stale Firestore copies are never applied.
     setContent: (html) => {
-      if (editor && html) {
+      if (editor && html && !collab) {
         editor.commands.setContent(html, false);
         lastLenRef.current = editor.getText().length;
         updatePages(editor);
@@ -241,7 +273,13 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
         </div>
       </div>
       <div className="workspace-editor-status">
-        <span>{readOnly ? 'View only' : 'Auto-save enabled'}</span>
+        <span>
+          {readOnly
+            ? 'View only'
+            : collab
+              ? collab.synced ? 'Live editing' : 'Connecting to live editing…'
+              : 'Auto-save enabled'}
+        </span>
         <span>
           Page {currentPage}
           {pageCount > 1 ? ` of ${pageCount}` : ''}

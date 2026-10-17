@@ -46,6 +46,8 @@ import { classifyPasteDelta, buildPasteRanges } from '../utils/pasteDetection';
 import { detectContentDifficulty } from '../utils/difficultyDetection';
 import { gradeSubmission, writingFromReport } from '../utils/behaviorGrade';
 import { logger } from '../utils/logger';
+import { useFlag } from '../flags/FlagsProvider';
+import { liveCollab, useCollab } from '../collab/useCollab';
 
 const PASTE_MSG = 'Large content pasted in short time';
 
@@ -241,6 +243,18 @@ export default function WorkspacePanel({
   const readOnly = currentUser?.role === 'lecturer';
   const isStudent = !readOnly;
   const editingLocked = readOnly || locked;
+
+  // Live editing (step 2.2): student members on an open document, when yjs_enabled is on.
+  // Anything else, or a collab server that can't be reached, keeps the old Firestore sync.
+  const yjsEnabled = useFlag('yjs_enabled');
+  const collabState = useCollab({
+    enabled: yjsEnabled && openFile?.type === 'document' && !editingLocked && !openFile?.submitted,
+    groupId,
+    fileId: openFile?.id,
+    user: currentUser,
+    loadSeedHtml: async () => (await getDocumentContent(openFile.id))?.html || openFile.contentHtml || '',
+  });
+  const collab = liveCollab(collabState);
 
   // Esc closes the submit modal (Enter-to-submit is handled on the email field, which
   // also enforces the required-email validation).
@@ -651,9 +665,11 @@ export default function WorkspacePanel({
 
   const autosaveTimerRef = useRef(null);
 
-  const handleEditorChange = useCallback(({ html, text }) => {
+  const handleEditorChange = useCallback(({ html, text, remote = false }) => {
     setEditorHtml(html);
     setEditorContent(text);
+    // Another member's live edit: their own client records and saves it.
+    if (remote) return;
     if (openFile?.id) {
       setLastEditedMeta((m) => ({ ...m, [openFile.id]: { user: userName, timestamp: Date.now() } }));
     }
@@ -1606,6 +1622,8 @@ export default function WorkspacePanel({
             >
               {isDoc ? (
                 <WorkspaceEditor
+                  key={collab ? `live-${openFile.id}` : 'classic'}
+                  collab={collab}
                   ref={editorRef}
                   storageKey={`peerlytics-doc-${openFile.id}`}
                   initialHtml={editorHtml}
