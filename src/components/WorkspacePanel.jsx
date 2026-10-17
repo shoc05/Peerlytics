@@ -174,6 +174,8 @@ export default function WorkspacePanel({
   pushToast,
   pushActivity,
   deadline,
+  // Set by the server once the deadline passes (backend/src/jobs/deadlines): no more edits.
+  locked = false,
   createdDate,
   submissions = [],
   workspaceSubmissions = [],
@@ -238,6 +240,7 @@ export default function WorkspacePanel({
   const userName = currentUser?.name || 'You';
   const readOnly = currentUser?.role === 'lecturer';
   const isStudent = !readOnly;
+  const editingLocked = readOnly || locked;
 
   // Esc closes the submit modal (Enter-to-submit is handled on the email field, which
   // also enforces the required-email validation).
@@ -1606,7 +1609,7 @@ export default function WorkspacePanel({
                   ref={editorRef}
                   storageKey={`peerlytics-doc-${openFile.id}`}
                   initialHtml={editorHtml}
-                  readOnly={readOnly || openFile.submitted}
+                  readOnly={editingLocked || openFile.submitted}
                   placeholder={readOnly ? '' : ''}
                   onPageChange={(current, total) => setDocPage({ current, total })}
                   onChange={handleEditorChange}
@@ -1654,7 +1657,7 @@ export default function WorkspacePanel({
               ) : openFile.type === 'spreadsheet' ? (
                 <SheetsEditor
                   fileId={openFile.id}
-                  readOnly={readOnly}
+                  readOnly={editingLocked}
                   darkMode={darkMode}
                   onChange={(serialized) => {
                     onEditorChange({ target: { value: serialized } });
@@ -1663,7 +1666,7 @@ export default function WorkspacePanel({
               ) : openFile.type === 'presentation' ? (
                 <SlidesEditor
                   fileId={openFile.id}
-                  readOnly={readOnly}
+                  readOnly={editingLocked}
                   darkMode={darkMode}
                   onChange={(serialized) => {
                     onEditorChange({ target: { value: serialized } });
@@ -1693,7 +1696,7 @@ export default function WorkspacePanel({
                   >
                     <textarea
                       value={editorContent}
-                      readOnly={readOnly}
+                      readOnly={editingLocked}
                       onChange={onEditorChange}
                       onBlur={onBlurSave}
                       placeholder={readOnly ? '' : ''}
