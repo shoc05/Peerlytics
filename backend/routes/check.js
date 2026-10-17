@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { detectAIWithHuggingFace } from '../services/huggingFaceService.js';
 import { checkGrammarWithVWT } from '../services/vwtService.js';
 import { buildSubmissionReport } from '../services/reportGenerator.js';
+import { getFlag } from '../src/flags/index.js';
 
 const router = Router();
 
@@ -46,8 +47,10 @@ export async function analyzeSubmission(body) {
     }
 
     // Both providers run simultaneously; neither failing blocks the submission.
+    // ai_detection_enabled off: detection is skipped and reported as unavailable.
+    const aiDetectionOn = await getFlag('ai_detection_enabled');
     const [aiResult, writing] = await Promise.all([
-      detectAIWithHuggingFace(plainText),
+      aiDetectionOn ? detectAIWithHuggingFace(plainText) : { available: false, reason: 'disabled' },
       checkGrammarWithVWT(plainText),
     ]);
 
