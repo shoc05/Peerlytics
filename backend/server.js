@@ -14,6 +14,7 @@ import analyzeRouter from './routes/analyze.js';
 import { createAuthRouter } from './src/auth/routes.js';
 import { startDeadlineReminders } from './services/reminderService.js';
 import { startServerDeadlines } from './src/jobs/deadlines/index.js';
+import { createExtensionRouter } from './src/jobs/deadlines/extensions.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -69,6 +70,7 @@ const analysisLimiter = rateLimit({ windowMs: 60_000, max: 20 });
 app.use('/api/check', analysisLimiter, checkRouter);
 app.use('/api/analyze', analysisLimiter, analyzeRouter);
 app.use('/api', createAuthRouter());
+app.use('/api', createExtensionRouter());
 
 app.use((err, _req, res, _next) => {
   console.error(err);

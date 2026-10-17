@@ -9,6 +9,9 @@ import { collabExtensions } from '../collab/extensions';
 import { COLLAB_FIELD, isRemoteTransaction } from '../collab/collab';
 import { exportDocument } from '../collab/tabsExport';
 import SyncBadge from '../collab/SyncBadge';
+import { FeedbackHighlights } from '../feedback/FeedbackHighlights';
+import FeedbackPanel from '../feedback/FeedbackPanel';
+import { createAnchor, textIndex } from '../feedback/anchors';
 import Toolbar from './Toolbar';
 import './workspace-editor.css';
 
@@ -36,6 +39,9 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
     // document has tabs (then saving and submitting cover every tab, with titles).
     tabField = COLLAB_FIELD,
     tabsEnabled = false,
+    // Inline feedback on a submitted document (step 4.6):
+    // { items, canComment, currentUid, onAdd(quote, comment), onDelete(id) }
+    feedback = null,
   },
   ref
 ) {
@@ -98,6 +104,7 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Placeholder.configure({ placeholder }),
       HighlightMark,
+      FeedbackHighlights,
       ...(collab ? collabExtensions(collab, tabField) : []),
     ],
     content: collab ? undefined : initialHtml || '<p></p>',
@@ -246,6 +253,19 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
     }
   }, [editor, storageKey, initialHtml, updatePages, collab]);
 
+  useEffect(() => {
+    if (editor && !editor.isDestroyed) editor.commands.setFeedback(feedback?.items || []);
+  }, [editor, feedback?.items]);
+
+  // The lecturer's current selection as a quote anchor, or null.
+  const getSelectionAnchor = useCallback(() => {
+    if (!editor) return null;
+    const { from, to } = editor.state.selection;
+    const index = textIndex(editor.state.doc);
+    const offsets = index.toOffsets(from, to);
+    return offsets ? createAnchor(index.text, offsets.start, offsets.end) : null;
+  }, [editor]);
+
   useImperativeHandle(ref, () => ({
     getHTML: () => (editor ? contentOf(editor).html : ''),
     getText: () => (editor ? contentOf(editor).text : ''),
@@ -283,6 +303,16 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
           </div>
         </div>
       </div>
+      {readOnly && feedback && (
+        <FeedbackPanel
+          items={feedback.items}
+          canComment={feedback.canComment}
+          currentUid={feedback.currentUid}
+          getSelectionAnchor={getSelectionAnchor}
+          onAdd={feedback.onAdd}
+          onDelete={feedback.onDelete}
+        />
+      )}
       <div className="workspace-editor-status">
         <span>{readOnly ? 'View only' : collab ? <SyncBadge collab={collab} /> : 'Auto-save enabled'}</span>
         <span>

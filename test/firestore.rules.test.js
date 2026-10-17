@@ -417,3 +417,52 @@ test('no client reads or writes collabDocs, not even a member of the group', asy
   await assertFails(setDoc(doc(student(), 'collabDocs/group:acc-g:file:acc-open'), { state: 'y' }));
   await assertFails(setDoc(doc(student(), 'collabDocs/group:acc-g:file:acc-new'), { state: 'y' }));
 });
+
+// ——— Step 4.6: extensions are the server's; inline feedback on submitted files ———
+
+test('clients cannot write an extension or read the audit log', async () => {
+  await seedAccess({ unlocked: true });
+  await assertFails(update(doc(lecturer(), 'groups/acc-g'), { extension: { reason: 'self-made' } }));
+  await assertFails(update(doc(lecturer(), 'groups/acc-g'), { extendedDeadline: '2026-12-01T00:00:00Z' }));
+  await assertFails(getDoc(doc(lecturer(), 'auditLog/any')));
+  await assertFails(setDoc(doc(lecturer(), 'auditLog/new'), { action: 'deadline.extended' }));
+});
+
+const feedbackDoc = (extra = {}) => ({
+  fileId: 'acc-done',
+  quote: { exact: 'final', prefix: '', suffix: '' },
+  comment: 'Cite the source here.',
+  lecturerId: 'acc-lec',
+  lecturerName: 'Dr L',
+  createdAt: serverTimestamp(),
+  ...extra,
+});
+
+test('a lecturer comments on submitted text only, after the submission reached them', async () => {
+  await seedAccess();
+  await assertFails(setDoc(doc(lecturer(), 'groups/acc-g/feedback/fb1'), feedbackDoc())); // not unlocked
+  await seedAccess({ unlocked: true });
+  const db = lecturer();
+  await assertFails(setDoc(doc(db, 'groups/acc-g/feedback/fb1'), feedbackDoc({ fileId: 'acc-open' }))); // not submitted
+  await assertFails(setDoc(doc(db, 'groups/acc-g/feedback/fb1'), feedbackDoc({ lecturerId: 'someone' })));
+  await assertFails(setDoc(doc(db, 'groups/acc-g/feedback/fb1'), feedbackDoc({ comment: '  ' })));
+  await assertFails(setDoc(doc(db, 'groups/acc-g/feedback/fb1'), feedbackDoc({ quote: { exact: '', prefix: '', suffix: '' } })));
+  await assertFails(setDoc(doc(db, 'groups/acc-g/feedback/fb1'), feedbackDoc({ extra: 1 })));
+  await assertFails(setDoc(doc(student(), 'groups/acc-g/feedback/fb1'), feedbackDoc({ lecturerId: 'acc-stu' })));
+  await assertSucceeds(setDoc(doc(db, 'groups/acc-g/feedback/fb1'), feedbackDoc()));
+});
+
+test('the group reads feedback but cannot change it; the author edits or deletes', async () => {
+  await seedAccess({ unlocked: true });
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'groups/acc-g/feedback/fb2'), { ...feedbackDoc(), createdAt: new Date() });
+  });
+  await assertSucceeds(getDoc(doc(student(), 'groups/acc-g/feedback/fb2')));
+  await assertFails(getDoc(doc(outsider(), 'groups/acc-g/feedback/fb2')));
+  await assertFails(update(doc(student(), 'groups/acc-g/feedback/fb2'), { comment: 'nope' }));
+  await assertFails(deleteDoc(doc(student(), 'groups/acc-g/feedback/fb2')));
+  await assertFails(update(doc(as('acc-lec2', 'lecturer'), 'groups/acc-g/feedback/fb2'), { comment: 'x' }));
+  await assertFails(update(doc(lecturer(), 'groups/acc-g/feedback/fb2'), { quote: { exact: 'moved', prefix: '', suffix: '' } }));
+  await assertSucceeds(update(doc(lecturer(), 'groups/acc-g/feedback/fb2'), { comment: 'Cite the 2023 report.' }));
+  await assertSucceeds(deleteDoc(doc(lecturer(), 'groups/acc-g/feedback/fb2')));
+});

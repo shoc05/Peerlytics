@@ -34,6 +34,11 @@ async function apiFetch(path, { method = 'GET', body } = {}) {
   return data;
 }
 
+/** Lecturer: give one group a new deadline (step 4.6). deadline is an ISO string. */
+export function grantExtension(groupId, { deadline, reason }) {
+  return apiFetch(`/api/groups/${encodeURIComponent(groupId)}/extension`, { method: 'POST', body: { deadline, reason } });
+}
+
 /** Pick student or lecturer once, right after sign-up. Returns { role, collegeId }. */
 export function chooseRole(role) {
   return apiFetch('/api/auth/role', { method: 'POST', body: { role } });

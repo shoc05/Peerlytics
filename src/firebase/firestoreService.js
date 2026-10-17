@@ -824,6 +824,34 @@ export async function getAllGradeDecisions(groupIds = []) {
   return out;
 }
 
+// ——— Inline feedback (step 4.6) ———
+
+// A lecturer's comment anchored to submitted text: quote = { exact, prefix, suffix }
+// (src/feedback/anchors.js). firestore.rules allow it only on a submitted file.
+export async function addInlineFeedback(groupId, { fileId, quote, comment, lecturerId, lecturerName }) {
+  await addDoc(collection(db(), 'groups', groupId, 'feedback'), {
+    fileId,
+    quote: { exact: quote.exact, prefix: quote.prefix || '', suffix: quote.suffix || '' },
+    comment,
+    lecturerId,
+    lecturerName: lecturerName || '',
+    createdAt: serverTimestamp(),
+  });
+}
+
+export function subscribeInlineFeedback(groupId, fileId, callback) {
+  const q = query(collection(db(), 'groups', groupId, 'feedback'), where('fileId', '==', fileId));
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (err) => logger.error('[subscribeInlineFeedback]', err.code, err.message)
+  );
+}
+
+export async function deleteInlineFeedback(groupId, feedbackId) {
+  await deleteDoc(doc(db(), 'groups', groupId, 'feedback', feedbackId));
+}
+
 // ——— Notifications ———
 
 export function subscribeNotifications(groupId, userId, callback) {
