@@ -2,13 +2,12 @@
 // its own undo history per user, so one student's undo never removes another's text.
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
+import { COLLAB_FIELD } from './collab';
 
-// Must match FIELD in collab/src/server.js.
-export const COLLAB_FIELD = 'default';
-
-export function collabExtensions(collab) {
+/** `field` is the Yjs fragment to edit: one per document tab (tabs.js), "default" without tabs. */
+export function collabExtensions(collab, field = COLLAB_FIELD) {
   return [
-    Collaboration.configure({ document: collab.ydoc, field: COLLAB_FIELD }),
+    Collaboration.configure({ document: collab.ydoc, field }),
     CollaborationCursor.configure({ provider: collab.provider, user: collab.user }),
   ];
 }

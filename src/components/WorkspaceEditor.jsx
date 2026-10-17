@@ -6,7 +6,8 @@ import TextAlign from '@tiptap/extension-text-align';
 import Placeholder from '@tiptap/extension-placeholder';
 import { HighlightMark } from './HighlightMark';
 import { collabExtensions } from '../collab/extensions';
-import { isRemoteTransaction } from '../collab/collab';
+import { COLLAB_FIELD, isRemoteTransaction } from '../collab/collab';
+import { exportDocument } from '../collab/tabsExport';
 import Toolbar from './Toolbar';
 import './workspace-editor.css';
 
@@ -30,6 +31,10 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
     onPageChange,
     // Live editing (src/collab/useCollab): the Yjs document is the content, not initialHtml.
     collab = null,
+    // Document tabs (src/collab/useDocumentTabs): the tab fragment on screen, and whether the
+    // document has tabs (then saving and submitting cover every tab, with titles).
+    tabField = COLLAB_FIELD,
+    tabsEnabled = false,
   },
   ref
 ) {
@@ -81,6 +86,10 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
   // True while this client loads the old Firestore text into a new live document.
   const seedingRef = useRef(false);
 
+  // With tabs, "the document" is every tab with its title; otherwise the editor's content.
+  const contentOf = (ed) =>
+    collab && tabsEnabled ? exportDocument(collab.ydoc, ed.schema) : { html: ed.getHTML(), text: ed.getText() };
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] }, ...(collab ? { history: false } : {}) }),
@@ -88,7 +97,7 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Placeholder.configure({ placeholder }),
       HighlightMark,
-      ...(collab ? collabExtensions(collab) : []),
+      ...(collab ? collabExtensions(collab, tabField) : []),
     ],
     content: collab ? undefined : initialHtml || '<p></p>',
     editable: !readOnly && (!collab || collab.synced),
@@ -106,8 +115,7 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
       },
     },
     onUpdate: ({ editor: ed, transaction }) => {
-      const html = ed.getHTML();
-      const text = ed.getText();
+      const { html, text } = contentOf(ed);
       // Another member's change (or the one-time seed) arriving through Yjs: keep the view in
       // step, but don't count it as this student's edit, paste or writing time.
       if (collab && (seedingRef.current || isRemoteTransaction(transaction))) {
@@ -238,8 +246,10 @@ const WorkspaceEditor = forwardRef(function WorkspaceEditor(
   }, [editor, storageKey, initialHtml, updatePages, collab]);
 
   useImperativeHandle(ref, () => ({
-    getHTML: () => editor?.getHTML() ?? '',
-    getText: () => editor?.getText() ?? '',
+    getHTML: () => (editor ? contentOf(editor).html : ''),
+    getText: () => (editor ? contentOf(editor).text : ''),
+    // Tab titles and word counts for the analysis report, or null without tabs.
+    getTabs: () => (editor && collab && tabsEnabled ? exportDocument(collab.ydoc, editor.schema).tabs : null),
     getEditor: () => editor,
     getPageInfo: () => ({ current: currentPage, total: pageCount }),
     // Under live editing Yjs owns the content, so stale Firestore copies are never applied.

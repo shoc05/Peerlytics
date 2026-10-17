@@ -48,6 +48,7 @@ import { gradeSubmission, writingFromReport } from '../utils/behaviorGrade';
 import { logger } from '../utils/logger';
 import { useFlag } from '../flags/FlagsProvider';
 import { liveCollab, useCollab } from '../collab/useCollab';
+import { useDocumentTabs } from '../collab/useDocumentTabs';
 
 const PASTE_MSG = 'Large content pasted in short time';
 
@@ -255,6 +256,8 @@ export default function WorkspacePanel({
     loadSeedHtml: async () => (await getDocumentContent(openFile.id))?.html || openFile.contentHtml || '',
   });
   const collab = liveCollab(collabState);
+  // Document tabs (step 2.3): the data and actions for the tabs panel (N5).
+  const documentTabs = useDocumentTabs(collab, { enabled: useFlag('doc_tabs_enabled') });
 
   // Esc closes the submit modal (Enter-to-submit is handled on the email field, which
   // also enforces the required-email validation).
@@ -723,6 +726,7 @@ export default function WorkspacePanel({
     const filePasteEvents = pasteEvents.filter((p) => p.fileId === openFile.id);
     const analytics = await getAnalyticsSnapshot(wsId).catch(() => []);
 
+    const tabs = isDocument ? editorRef.current?.getTabs?.() ?? null : null;
     const { report } = await submitForCheck({
       text,
       html,
@@ -734,7 +738,10 @@ export default function WorkspacePanel({
       difficulty,
       versions,
       pasteEvents: filePasteEvents,
+      ...(tabs ? { tabs } : {}),
     });
+    // Keep tab titles on the report even when the analysis service was unavailable.
+    if (tabs && !report.tabs) report.tabs = tabs;
 
     const { report: saved } = await saveFullSubmission({
       report,
@@ -1622,8 +1629,10 @@ export default function WorkspacePanel({
             >
               {isDoc ? (
                 <WorkspaceEditor
-                  key={collab ? `live-${openFile.id}` : 'classic'}
+                  key={collab ? `live-${openFile.id}-${documentTabs.activeField}` : 'classic'}
                   collab={collab}
+                  tabField={documentTabs.activeField}
+                  tabsEnabled={documentTabs.enabled}
                   ref={editorRef}
                   storageKey={`peerlytics-doc-${openFile.id}`}
                   initialHtml={editorHtml}

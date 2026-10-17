@@ -2,6 +2,9 @@
 // they run under node:test.
 import { ySyncPluginKey } from 'y-prosemirror';
 
+// The editor's Yjs fragment. Must match FIELD in collab/src/server.js.
+export const COLLAB_FIELD = 'default';
+
 /** Same format as collab/src/access.js. */
 export function documentName(groupId, fileId) {
   return `group:${groupId}:file:${fileId}`;
