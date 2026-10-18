@@ -2,6 +2,9 @@
 // they run under node:test.
 import { ySyncPluginKey } from 'y-prosemirror';
 
+// The editor's Yjs fragment. Must match FIELD in collab/src/server.js.
+export const COLLAB_FIELD = 'default';
+
 /** Same format as collab/src/access.js. */
 export function documentName(groupId, fileId) {
   return `group:${groupId}:file:${fileId}`;
@@ -38,4 +41,16 @@ export function parseServerMessage(payload) {
   } catch {
     return null;
   }
+}
+
+/**
+ * The badge text for a live document (step 3.2):
+ *   offline (server unreachable, editing the device copy) -> "Offline — saved on this device"
+ *   online with changes not yet confirmed by the server  -> "Syncing…"
+ */
+export function syncLabel({ status, online = true, unsynced = 0 } = {}) {
+  if (status === 'connecting') return 'Connecting to live editing…';
+  if (status === 'offline' || (status === 'connected' && !online)) return 'Offline — saved on this device';
+  if (status === 'connected') return unsynced > 0 ? 'Syncing…' : 'Live editing';
+  return null;
 }

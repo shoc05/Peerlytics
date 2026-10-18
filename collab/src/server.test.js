@@ -222,3 +222,28 @@ test('an empty document asks exactly one writer to seed it from the old Firestor
   a.close();
   await until(() => seen.b === 1);
 });
+
+test('edits made offline merge with everyone else\'s when the connection comes back (step 3.2)', async () => {
+  const server = await start(makeWorld());
+  const a = connect(server, 'tok-a');
+  const b = connect(server, 'tok-b');
+  await Promise.all([a.ready, b.ready]);
+  a.document.transact(() => {
+    const p = new Y.XmlElement('paragraph');
+    p.insert(0, [new Y.XmlText('Shared start.')]);
+    a.document.getXmlFragment(FIELD).insert(0, [p]);
+  });
+  await until(() => paragraphText(b.document) === 'Shared start.');
+
+  // A goes offline and keeps writing; B writes at the same time.
+  a.provider.disconnect();
+  const textOf = (doc) => doc.getXmlFragment(FIELD).get(0).get(0);
+  textOf(a.document).insert(textOf(a.document).length, ' Written offline.');
+  textOf(b.document).insert(0, 'Online: ');
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(paragraphText(b.document), 'Online: Shared start.');
+
+  await a.provider.connect();
+  const merged = 'Online: Shared start. Written offline.';
+  await until(() => paragraphText(a.document) === merged && paragraphText(b.document) === merged);
+});

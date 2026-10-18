@@ -3,6 +3,7 @@ import { detectAIWithHuggingFace } from '../services/huggingFaceService.js';
 import { checkGrammarWithVWT } from '../services/vwtService.js';
 import { buildSubmissionReport } from '../services/reportGenerator.js';
 import { getFlag } from '../src/flags/index.js';
+import { reportTabs } from '../src/tabs/reportTabs.js';
 
 const router = Router();
 
@@ -39,6 +40,7 @@ export async function analyzeSubmission(body) {
       pasteEvents = [],
       difficulty = 1,
       studentName,
+      tabs,
     } = body;
     const plainText = (text || '').trim() || stripHtml(html || '');
 
@@ -111,6 +113,10 @@ export async function analyzeSubmission(body) {
         pasteEvents: pasteEvents.slice(0, 20),
       },
     });
+
+    // Document tab titles (step 2.3) stay on the report.
+    const keptTabs = reportTabs(tabs);
+    if (keptTabs) report.tabs = keptTabs;
 
     return {
       success: true,
