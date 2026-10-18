@@ -15,6 +15,7 @@ import { createAuthRouter } from './src/auth/routes.js';
 import { startDeadlineReminders } from './services/reminderService.js';
 import { startServerDeadlines } from './src/jobs/deadlines/index.js';
 import { createExtensionRouter } from './src/jobs/deadlines/extensions.js';
+import { createMetrics } from './src/metrics/index.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -42,6 +43,10 @@ function validateConfig() {
 validateConfig();
 
 app.set('trust proxy', 1); // correct req.ip behind Render/hosting proxies (for rate limiting)
+// Prometheus: count and time every request; GET /metrics for the cluster (step 5.3).
+const metrics = createMetrics();
+app.use(metrics.middleware);
+app.use(metrics.router());
 app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
 app.use(express.json({ limit: '2mb' }));
 
