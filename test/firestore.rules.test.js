@@ -18,6 +18,7 @@ import {
   Timestamp,
   updateDoc,
 } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, setDoc } from 'firebase/firestore';
 
 const projectId = 'demo-peerlytics';
 const rules = await readFile(new URL('../firestore.rules', import.meta.url), 'utf8');
