@@ -1,5 +1,7 @@
 # Peerlytics AI Workspace System
 
+[![CI](https://github.com/shoc05/Peerlytics/actions/workflows/ci.yml/badge.svg)](https://github.com/shoc05/Peerlytics/actions/workflows/ci.yml)
+
 Production-ready academic collaboration platform with Firebase auth, Firestore data, TipTap workspace, and AI + plagiarism checks.
 
 ## Features
