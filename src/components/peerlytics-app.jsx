@@ -2184,6 +2184,7 @@ const PeerlyticsDashboard = () => {
                 pushToast={pushToast}
                 pushActivity={pushActivity}
                 deadline={groupMeta?.deadline || null}
+                locked={groupMeta?.locked === true}
                 createdDate={groupMeta?.createdDate || null}
                 submissions={submissionReports}
                 workspaceSubmissions={workspaceSubmissions}

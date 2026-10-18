@@ -40,6 +40,19 @@
           (request.auth.uid in g.memberIds || request.auth.uid in g.lecturerIds);
       }
 
+      // Set by the server deadline job (backend/src/jobs/deadlines) once the deadline passes.
+      // A locked workspace is read-only for everyone using the client SDK.
+      function groupLocked(groupId) {
+        let g = groupData(groupId);
+        return g != null && g.get('locked', false) == true;
+      }
+
+      // Fields only the backend (Admin SDK) may write on a group.
+      function touchesServerOnlyGroupFields() {
+        return request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['locked', 'lockedAt', 'lockedBy', 'lockedDeadline', 'autoSubmit', 'extendedDeadline']);
+      }
+
       function isLecturerOfGroup(groupId) {
         let g = groupData(groupId);
         return g != null && request.auth.uid in g.lecturerIds;
@@ -114,7 +127,7 @@
         // received a submission to their email) may add THEMSELVES to lecturerIds and/or
         // submittedToLecturers — this is how a targeted lecturer becomes a group member
         // so their reads of reports/analytics pass. They can only add their own uid.
-        allow update: if signedIn() && (
+        allow update: if signedIn() && !touchesServerOnlyGroupFields() && (
           isMemberOfGroup(groupId) ||
           (
             request.resource.data.diff(resource.data).affectedKeys()
@@ -131,18 +144,18 @@
 
         match /folders/{folderId} {
           allow read: if canReadWorkspaceContent(groupId);
-          allow create, update, delete: if isMemberOfGroup(groupId) && !isLecturer();
+          allow create, update, delete: if isMemberOfGroup(groupId) && !isLecturer() && !groupLocked(groupId);
         }
 
         match /files/{fileId} {
           allow read: if canReadWorkspaceContent(groupId);
-          allow create, update: if isMemberOfGroup(groupId) && !isLecturer();
-          allow delete: if isMemberOfGroup(groupId) && !isLecturer();
+          allow create, update: if isMemberOfGroup(groupId) && !isLecturer() && !groupLocked(groupId);
+          allow delete: if isMemberOfGroup(groupId) && !isLecturer() && !groupLocked(groupId);
         }
 
         match /versions/{versionId} {
           allow read: if canReadWorkspaceContent(groupId);
-          allow create, update: if isMemberOfGroup(groupId) && !isLecturer();
+          allow create, update: if isMemberOfGroup(groupId) && !isLecturer() && !groupLocked(groupId);
           allow delete: if false;
         }
 
@@ -157,7 +170,7 @@
           // flow can attach them to the report); lecturers read after submission unlock.
           allow read: if (isMemberOfGroup(groupId) && !isLecturer()) ||
             (canReadWorkspaceContent(groupId) && isLecturerOfGroup(groupId));
-          allow create: if isMemberOfGroup(groupId) && !isLecturer();
+          allow create: if isMemberOfGroup(groupId) && !isLecturer() && !groupLocked(groupId);
           allow update, delete: if false;
         }
 
@@ -207,11 +220,14 @@
           canReadWorkspaceContent(resource.data.groupId);
         allow create: if signedIn() &&
           request.resource.data.groupId != null &&
-          isMemberOfGroup(request.resource.data.groupId) && !isLecturer();
+          isMemberOfGroup(request.resource.data.groupId) && !isLecturer() &&
+          !groupLocked(request.resource.data.groupId);
         allow update: if signedIn() &&
-          isMemberOfGroup(resource.data.groupId) && !isLecturer();
+          isMemberOfGroup(resource.data.groupId) && !isLecturer() &&
+          !groupLocked(resource.data.groupId);
         allow delete: if signedIn() &&
-          isMemberOfGroup(resource.data.groupId) && !isLecturer();
+          isMemberOfGroup(resource.data.groupId) && !isLecturer() &&
+          !groupLocked(resource.data.groupId);
       }
 
       // Reports are created during submission; any group member (student or lecturer) may read.
@@ -226,7 +242,8 @@
         // member of the report's group so a report can't be forged/overwritten by outsiders.
         allow create: if signedIn() &&
           request.resource.data.groupId != null &&
-          isMemberOfGroup(request.resource.data.groupId);
+          isMemberOfGroup(request.resource.data.groupId) &&
+          !groupLocked(request.resource.data.groupId);
         allow update: if signedIn() &&
           isMemberOfGroup(resource.data.groupId);
         allow delete: if isLecturer();
@@ -246,8 +263,8 @@
         // saveSubmissionReport keys by userId; saveFullSubmission keys by submittedBy.
         allow create: if signedIn() &&
           (request.resource.data.workspaceId != null
-            ? isMemberOfGroup(request.resource.data.workspaceId)
-            : isMemberOfGroup(request.resource.data.groupId)) &&
+            ? isMemberOfGroup(request.resource.data.workspaceId) && !groupLocked(request.resource.data.workspaceId)
+            : isMemberOfGroup(request.resource.data.groupId) && !groupLocked(request.resource.data.groupId)) &&
           (request.resource.data.submittedBy == request.auth.uid ||
             request.resource.data.userId == request.auth.uid);
         allow update: if signedIn() && (

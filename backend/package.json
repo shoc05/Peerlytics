@@ -19,7 +19,6 @@
     "firebase": "^12.13.0",
     "firebase-admin": "^14.0.0",
     "node-cron": "^4.2.1",
-    "nodemailer": "^10.0.2"
     "nodemailer": "^9.0.0",
     "zod": "^3.25.76"
     "nodemailer": "^9.0.0"
