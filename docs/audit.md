@@ -19,6 +19,7 @@ The biggest risk is trust, not missing features. The Firestore rules let a signe
 On 14 Oct two new findings were added: the lecturer's "View submitted file" window renders student HTML unsanitised (a stored XSS, High), and the reminder job wrote student email addresses to the server log (Medium, fixed in PEER-5 by masking them).
 
 The engineering base is now in place: CI with lint, unit tests and rules tests on every PR, branch protection, environments, and 21 passing unit tests (14 frontend, 7 backend). Next: the rules lock-down, then roles and backend auth, then PostgreSQL and the course hierarchy (section 6).
+**Update 13 Oct:** PR #1 has since been merged, so `ci.yml` and `pr-title.yml` now run on every PR. `scripts/setup-github.sh` has been run: `develop` exists; `develop` and `main` require a PR, 1 approval and the three CI checks; `main` also needs the code owner; `v*` tags are admin-only; `staging` deploys from `develop` and `production` from `v*` tags with Sangay's approval. Only the PostgreSQL secrets are set so far. The CI rows below describe the state on 12 Oct.
 
 **Status values:** Done, Partial, Missing, Blocked. The Evidence column also says what *kind* of thing exists:
 
@@ -100,6 +101,7 @@ Owners follow the phase split in the team guide. Phase 1 is Kezang (roles, deadl
 | Feature flags | None | Missing | **Planned only.** No Remote Config in `src/`. | Unfinished features can't be shipped dark | Add a small flag reader (Remote Config) before Phase 2 features land | Ngawang |
 | Security scans | Snyk GitHub app on PRs | Partial | **Not verifiable** from the repo. A Snyk check appears on PRs; no `security.yml`; no code, image or IaC scans | Vulnerable packages go unnoticed | Add a `security.yml` workflow | Tshewang |
 | CI | `ci.yml` (website, backend, Firestore rules tests) and `jira-check.yml` on every PR | Done | Merged in PR #1 and PR #8; all jobs green on PR #8. Branch protection requires 3 of the 4 checks | Rules tests not yet required | Rerun `scripts/setup-github.sh` so "Firestore rules tests" becomes required; add the remaining secrets as accounts are created | Sangay |
+| CI | Demo workflow on `main`; real CI in open PR #1 | Partial | PR #1 ran: backend pass, Jira key pass, website pass after PEER-2 | Merges are not gated on tests | Done 13 Oct: PR #1 merged and `scripts/setup-github.sh` run. Next: add the remaining secrets as accounts are created | Sangay |
 | Staging | None | Missing | **Planned only.** No Docker, k3s or deploy workflow. | No safe place to test before production | Dockerfiles, then a k3s staging deploy from `develop` | Ngawang |
 | Monitoring | Console logs only | Missing | **Planned only.** No Prometheus, Grafana or Uptime Kuma config. | Outages go unnoticed | Health endpoint exists; add uptime checks first | Kezang |
 | Backups | None | Missing | **Planned only.** No Firestore export or database dump job | Data loss cannot be recovered | Scheduled Firestore export, then a PostgreSQL dump with a restore drill | Kezang |
