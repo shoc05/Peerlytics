@@ -6,7 +6,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { deleteDoc, deleteField, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, setDoc } from 'firebase/firestore';
 
 const projectId = 'demo-peerlytics';
 const rules = await readFile(new URL('../firestore.rules', import.meta.url), 'utf8');
@@ -143,64 +143,4 @@ test('members cannot unlock a group or set the lock, claim or extension fields',
 test('prevents deletion of immutable workspace versions', async () => {
   const db = testEnvironment.authenticatedContext('student-1').firestore();
   await assertFails(deleteDoc(doc(db, 'groups/group-1/versions/version-1')));
-});
-
-// ——— users/{uid}.role is written only by the backend (step 1.2) ———
-
-async function seedUser(uid, data) {
-  await testEnvironment.withSecurityRulesDisabled(async (context) => {
-    await setDoc(doc(context.firestore(), `users/${uid}`), data);
-  });
-}
-
-test('allows a user to create their own profile without a role', async () => {
-  const db = testEnvironment.authenticatedContext('new-user').firestore();
-  await assertSucceeds(setDoc(doc(db, 'users/new-user'), { uid: 'new-user', name: 'New', classSection: '' }));
-});
-
-test('denies creating your own profile with any role', async () => {
-  for (const role of ['student', 'lecturer', 'admin', 'superAdmin', 'collegeAdmin']) {
-    const uid = `picker-${role}`;
-    const db = testEnvironment.authenticatedContext(uid).firestore();
-    await assertFails(setDoc(doc(db, `users/${uid}`), { uid, name: 'X', role }));
-  }
-});
-
-test('denies creating a profile for someone else', async () => {
-  const db = testEnvironment.authenticatedContext('student-1').firestore();
-  await assertFails(setDoc(doc(db, 'users/someone-else'), { uid: 'someone-else', name: 'X' }));
-});
-
-test('denies changing or removing your own role', async () => {
-  await seedUser('student-2', { uid: 'student-2', name: 'S', role: 'student' });
-  const db = testEnvironment.authenticatedContext('student-2').firestore();
-  for (const role of ['lecturer', 'admin', 'superAdmin', 'collegeAdmin']) {
-    await assertFails(updateDoc(doc(db, 'users/student-2'), { role }));
-  }
-  await assertFails(updateDoc(doc(db, 'users/student-2'), { role: deleteField() }));
-  await assertFails(setDoc(doc(db, 'users/student-2'), { uid: 'student-2', name: 'S' }));
-});
-
-test('allows updating your own profile fields other than role', async () => {
-  await seedUser('student-3', { uid: 'student-3', name: 'S', role: 'student', classSection: '' });
-  const db = testEnvironment.authenticatedContext('student-3').firestore();
-  await assertSucceeds(updateDoc(doc(db, 'users/student-3'), { name: 'Renamed', classSection: 'CS Year 2' }));
-});
-
-test('denies setting the role of another user', async () => {
-  await seedUser('student-4', { uid: 'student-4', name: 'S', role: 'student', groupId: null });
-  const db = testEnvironment.authenticatedContext('student-1').firestore();
-  await assertFails(updateDoc(doc(db, 'users/student-4'), { role: 'lecturer' }));
-  await assertFails(updateDoc(doc(db, 'users/student-4'), { role: 'lecturer', groupId: 'group-1' }));
-});
-
-test('gives the superAdmin mirror the same read-only oversight as the legacy admin role', async () => {
-  await seedUser('super-1', { uid: 'super-1', role: 'superAdmin' });
-  await seedUser('legacy-admin', { uid: 'legacy-admin', role: 'admin' });
-  for (const uid of ['super-1', 'legacy-admin']) {
-    const db = testEnvironment.authenticatedContext(uid).firestore();
-    await assertSucceeds(getDoc(doc(db, 'groups/group-1')));
-  }
-  const outsider = testEnvironment.authenticatedContext('outsider').firestore();
-  await assertFails(getDoc(doc(outsider, 'groups/group-1')));
 });

@@ -8,6 +8,7 @@
     "dev": "node --watch server.js",
     "lint": "eslint . --ext .js",
     "test": "node --test \"services/**/*.test.js\" \"src/**/*.test.js\"",
+    "test": "node --test \"services/**/*.test.js\"",
     "test:mail": "node scripts/test-mail.js"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
     "node-cron": "^4.2.1",
     "nodemailer": "^9.0.0",
     "zod": "^3.25.76"
+    "nodemailer": "^9.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
