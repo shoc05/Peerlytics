@@ -1,0 +1,17 @@
+#!/bin/sh
+# Local direct push guard (step 0.5b). Turned on by "npm install" through the
+# "prepare" script (git config core.hooksPath .githooks).
+# Refuses pushes whose target is develop or main. Skipping it with --no-verify
+# does not help: the Push guard workflow still catches the push on GitHub.
+
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/develop|refs/heads/main)
+      echo "Direct push to ${remote_ref#refs/heads/} refused." >&2
+      echo "Push to your feature branch and open a PR instead." >&2
+      status=1
+      ;;
+  esac
+done
+exit $status
