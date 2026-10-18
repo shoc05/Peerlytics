@@ -7,6 +7,7 @@ import { Hocuspocus } from '@hocuspocus/server';
 import * as Y from 'yjs';
 import { decideAccess, parseDocumentName } from './access.js';
 import { createSeedCoordinator } from './seed.js';
+import { createCollabMetrics } from './metrics.js';
 
 // The TipTap Collaboration extension's fragment.
 export const FIELD = 'default';
@@ -25,6 +26,7 @@ export function createCollabServer({
   timeout = 30_000,
   log = console,
   quiet = true,
+  metrics = createCollabMetrics(),
 }) {
   const seeds = createSeedCoordinator();
 
@@ -42,6 +44,15 @@ export function createCollabServer({
       if (path === '/health') {
         response.writeHead(200, { 'Content-Type': 'application/json' });
         response.end(JSON.stringify({ ok: true, service: 'peerlytics-collab' }));
+      } else if (path === '/metrics') {
+        const token = process.env.METRICS_TOKEN;
+        if (token && request.headers.authorization !== `Bearer ${token}`) {
+          response.writeHead(401);
+          response.end();
+        } else {
+          response.writeHead(200, { 'Content-Type': metrics.registry.contentType });
+          response.end(await metrics.registry.metrics());
+        }
       } else {
         response.writeHead(404, { 'Content-Type': 'application/json' });
         response.end(JSON.stringify({ error: 'Not found' }));
@@ -52,12 +63,16 @@ export function createCollabServer({
 
     async onAuthenticate({ token, documentName, connection }) {
       const target = parseDocumentName(documentName);
-      if (!target) throw new Error('BAD_DOCUMENT');
+      if (!target) {
+        metrics.refused.inc({ reason: 'BAD_DOCUMENT' });
+        throw new Error('BAD_DOCUMENT');
+      }
 
       let decoded;
       try {
         decoded = await verifyToken(token);
       } catch {
+        metrics.refused.inc({ reason: 'TOKEN_INVALID' });
         throw new Error('TOKEN_INVALID');
       }
       const uid = decoded?.uid;
@@ -67,6 +82,7 @@ export function createCollabServer({
       const decision = decideAccess({ uid, role, group, file });
       if (!decision.allow) {
         log.info?.(`[collab] refused uid=${uid ?? 'none'} doc=${documentName} reason=${decision.reason}`);
+        metrics.refused.inc({ reason: decision.reason });
         throw new Error(decision.reason);
       }
       connection.readOnly = decision.readOnly;
@@ -74,6 +90,7 @@ export function createCollabServer({
     },
 
     async onLoadDocument({ documentName, document }) {
+      metrics.documents.inc();
       const state = await storage.load(documentName);
       if (state && state.byteLength) Y.applyUpdate(document, state);
       else seeds.markEmpty(documentName);
@@ -81,10 +98,13 @@ export function createCollabServer({
     },
 
     async connected({ documentName, connectionInstance }) {
+      metrics.connections.inc();
+      metrics.active.inc();
       seeds.offer(documentName, connectionInstance);
     },
 
     async onDisconnect({ documentName, document, socketId }) {
+      metrics.active.dec();
       seeds.released(documentName, socketId, {
         isEmpty: document.isEmpty(FIELD),
         connections: document.getConnections().filter((c) => c.socketId !== socketId),
@@ -92,10 +112,17 @@ export function createCollabServer({
     },
 
     async onStoreDocument({ documentName, document }) {
-      await storage.store(documentName, Y.encodeStateAsUpdate(document));
+      try {
+        await storage.store(documentName, Y.encodeStateAsUpdate(document));
+      } catch (err) {
+        metrics.storeErrors.inc();
+        log.error?.(`[collab] could not store ${documentName}: ${err.message}`);
+        throw err;
+      }
     },
 
     async afterUnloadDocument({ documentName }) {
+      metrics.documents.dec();
       seeds.forget(documentName);
     },
   });

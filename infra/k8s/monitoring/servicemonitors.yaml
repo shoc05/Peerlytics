@@ -1,0 +1,50 @@
+# Scrape /metrics on the app services (step 5.3). Assumes the app runs in namespace
+# "peerlytics" with Services labelled app.kubernetes.io/name=<service> and a port named
+# "http" (backend 5000, collab 1234, notifier). Match these to infra/k8s/ when it lands.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: peerlytics-backend
+  namespace: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [peerlytics]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: peerlytics-backend
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: peerlytics-collab
+  namespace: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [peerlytics]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: peerlytics-collab
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: peerlytics-notifier
+  namespace: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [peerlytics]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: peerlytics-notifier
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

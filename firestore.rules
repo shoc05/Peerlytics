@@ -54,7 +54,7 @@
 
       // Fields only the backend (Admin SDK) may write on a group.
       function serverOnlyGroupFields() {
-        return ['locked', 'lockedAt', 'lockedBy', 'lockedDeadline', 'autoSubmit', 'extendedDeadline'];
+        return ['locked', 'lockedAt', 'lockedBy', 'lockedDeadline', 'autoSubmit', 'extendedDeadline', 'extension'];
       }
 
       function touchesServerOnlyGroupFields() {
@@ -229,6 +229,31 @@
           allow update, delete: if false;
         }
 
+        // Inline feedback (step 4.6): a lecturer's comment anchored to the text of a submitted
+        // file. The group reads it; only its author edits the comment or deletes it.
+        match /feedback/{feedbackId} {
+          allow read: if canReadWorkspaceContent(groupId);
+          allow create: if submissionUnlockedForLecturer(groupId) &&
+            request.resource.data.keys().hasOnly(['fileId', 'quote', 'comment', 'lecturerId', 'lecturerName', 'createdAt']) &&
+            request.resource.data.lecturerId == request.auth.uid &&
+            request.resource.data.fileId is string &&
+            fileSubmitted(groupId, request.resource.data.fileId) &&
+            request.resource.data.quote.keys().hasOnly(['exact', 'prefix', 'suffix']) &&
+            request.resource.data.quote.exact is string &&
+            request.resource.data.quote.exact.size() > 0 && request.resource.data.quote.exact.size() <= 1000 &&
+            request.resource.data.quote.prefix is string && request.resource.data.quote.prefix.size() <= 64 &&
+            request.resource.data.quote.suffix is string && request.resource.data.quote.suffix.size() <= 64 &&
+            request.resource.data.comment is string &&
+            request.resource.data.comment.trim().size() > 0 && request.resource.data.comment.size() <= 2000 &&
+            request.resource.data.createdAt == request.time;
+          allow update: if submissionUnlockedForLecturer(groupId) &&
+            resource.data.lecturerId == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comment']) &&
+            request.resource.data.comment is string &&
+            request.resource.data.comment.trim().size() > 0 && request.resource.data.comment.size() <= 2000;
+          allow delete: if submissionUnlockedForLecturer(groupId) && resource.data.lecturerId == request.auth.uid;
+        }
+
         match /notifications/{notificationId} {
           allow read: if isMemberOfGroup(groupId);
           allow create: if isMemberOfGroup(groupId);
@@ -295,6 +320,12 @@
           isMemberOfGroup(request.resource.data.groupId) &&
           !groupLocked(request.resource.data.groupId);
         allow update, delete: if false;
+      }
+
+      // Who did what, when and why (deadline extensions, step 4.6). Written by the backend
+      // only, until the PostgreSQL audit_log takes over.
+      match /auditLog/{entryId} {
+        allow read, write: if false;
       }
 
       // Yjs state of each live document. Only the collab server (Admin SDK) reads or writes it;

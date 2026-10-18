@@ -29,3 +29,6 @@ Thumbs.db
 # Local secret files used by scripts/setup-github.sh
 .secrets.env
 secrets/
+
+# Local Alertmanager e-mail settings for infra/k8s/monitoring (see its README)
+infra/k8s/monitoring/values-local.yaml

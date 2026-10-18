@@ -24,6 +24,9 @@ import {
   deleteWorkspaceFolder,
   saveDocumentContent,
   getDocumentContent,
+  addInlineFeedback,
+  subscribeInlineFeedback,
+  deleteInlineFeedback,
   saveDocumentVersion,
   subscribeFileVersions,
   subscribePasteEvents,
@@ -262,6 +265,32 @@ export default function WorkspacePanel({
   const collab = liveCollab(collabState);
   // Document tabs (step 2.3): the data and actions for the tabs panel (N5).
   const documentTabs = useDocumentTabs(collab, { enabled: useFlag('doc_tabs_enabled') });
+  // Inline feedback (step 4.6): lecturer comments on a submitted document; the group reads them.
+  const [inlineFeedback, setInlineFeedback] = useState([]);
+  useEffect(() => {
+    if (!groupId || !openFile?.id || !openFile.submitted) {
+      setInlineFeedback([]);
+      return undefined;
+    }
+    return subscribeInlineFeedback(groupId, openFile.id, setInlineFeedback);
+  }, [groupId, openFile?.id, openFile?.submitted]);
+  const feedback = openFile?.submitted
+    ? {
+        items: inlineFeedback,
+        canComment: readOnly,
+        currentUid: currentUser?.uid,
+        onAdd: (quote, comment) =>
+          addInlineFeedback(groupId, {
+            fileId: openFile.id,
+            quote,
+            comment,
+            lecturerId: currentUser.uid,
+            lecturerName: userName,
+          }),
+        onDelete: (id) => deleteInlineFeedback(groupId, id).catch(() => pushToast?.('Could not delete the comment')),
+      }
+    : null;
+
   const tracking = useTrackingQueue({
     enabled: offlineEnabled,
     uid: currentUser?.uid,
@@ -1648,6 +1677,7 @@ export default function WorkspacePanel({
                   collab={collab}
                   tabField={documentTabs.activeField}
                   tabsEnabled={documentTabs.enabled}
+                  feedback={feedback}
                   ref={editorRef}
                   storageKey={`peerlytics-doc-${openFile.id}`}
                   initialHtml={editorHtml}
