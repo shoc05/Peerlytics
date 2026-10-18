@@ -73,3 +73,10 @@ export const authLinkStyle = {
   textDecoration: 'none',
   fontWeight: 600,
 };
+
+export const authSecondaryBtnStyle = (darkMode = false) => ({
+  ...authBtnStyle,
+  background: darkMode ? '#141414' : '#ffffff',
+  color: darkMode ? '#ededed' : '#1a2e24',
+  border: `1px solid ${darkMode ? '#2a2a2a' : '#dce5e0'}`,
+});
