@@ -19,6 +19,12 @@ export function isFirebaseConfigured() {
   return Boolean(import.meta.env.VITE_FIREBASE_API_KEY && import.meta.env.VITE_FIREBASE_PROJECT_ID);
 }
 
+export function getFirebaseApp() {
+  if (!isFirebaseConfigured()) return null;
+  if (!app) app = initializeApp(firebaseConfig);
+  return app;
+}
+
 export function getFirebaseAuth() {
   if (!isFirebaseConfigured()) return null;
   if (!auth) {
