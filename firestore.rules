@@ -297,6 +297,12 @@
         allow update, delete: if false;
       }
 
+      // Yjs state of each live document. Only the collab server (Admin SDK) reads or writes it;
+      // clients get the document through the collab server, which checks membership itself.
+      match /collabDocs/{docName} {
+        allow read, write: if false;
+      }
+
       match /submissions/{submissionId} {
         allow read: if signedIn() && (
           resource.data.submittedBy == request.auth.uid ||

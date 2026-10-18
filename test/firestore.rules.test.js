@@ -405,3 +405,15 @@ test('users read and write only their own fcmTokens', async () => {
   await assertFails(getDoc(doc(lecturer(), 'users/acc-stu/fcmTokens/tok-1')));
   await assertSucceeds(deleteDoc(doc(student(), 'users/acc-stu/fcmTokens/tok-1')));
 });
+
+// ——— Step 2.2: Yjs state is the collab server's only ———
+
+test('no client reads or writes collabDocs, not even a member of the group', async () => {
+  await seedAccess();
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'collabDocs/group:acc-g:file:acc-open'), { state: 'x' });
+  });
+  await assertFails(getDoc(doc(student(), 'collabDocs/group:acc-g:file:acc-open')));
+  await assertFails(setDoc(doc(student(), 'collabDocs/group:acc-g:file:acc-open'), { state: 'y' }));
+  await assertFails(setDoc(doc(student(), 'collabDocs/group:acc-g:file:acc-new'), { state: 'y' }));
+});
