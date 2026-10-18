@@ -102,3 +102,18 @@ npm run preview
 ## API
 
 `POST /api/check` — body: `{ text, html, fileId, userId, groupId, fileName }` — returns structured integrity report.
+
+## Direct pushes
+
+Every change to `develop` and `main` goes through a pull request. Two guards check this:
+
+- **On GitHub:** the *Push guard* workflow (`.github/workflows/push-guard.yml`) runs on every push to `develop` and `main`. If any pushed commit did not come through a merged pull request, the run fails, an issue titled "Direct push to &lt;branch&gt; by &lt;user&gt;" is opened with the `direct-push` label, and the job summary lists the commits. Bots and anyone in the repository variable `ALLOWED_DIRECT_PUSHERS` (comma-separated usernames, empty by default) are skipped.
+- **On your computer:** the `pre-push` hook in `.githooks/` refuses a push to `develop` or `main` with "Push to your feature branch and open a PR instead." `npm install` turns it on (`git config core.hooksPath .githooks`).
+
+The local hook can be skipped with `git push --no-verify`, but the workflow still catches the push.
+
+**If you pushed to `develop` or `main` by mistake:**
+
+1. Don't force-push. Create a branch from `develop` (or `main`) and revert the commit there: `git revert <sha>`.
+2. Push that branch and open a PR to undo the change.
+3. Redo your change on a feature branch and open a normal PR. Mention the `direct-push` issue so Sangay can close it.
