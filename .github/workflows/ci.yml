@@ -92,3 +92,5 @@ jobs:
         working-directory: backend
       - name: Test auth routes in the emulators
         run: npm run test:auth
+      - name: Test the server deadline job in the emulator
+        run: npm run test:deadlines

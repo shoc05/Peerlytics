@@ -13,6 +13,7 @@ import checkRouter from './routes/check.js';
 import analyzeRouter from './routes/analyze.js';
 import { createAuthRouter } from './src/auth/routes.js';
 import { startDeadlineReminders } from './services/reminderService.js';
+import { startServerDeadlines } from './src/jobs/deadlines/index.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -79,6 +80,8 @@ const server = app.listen(PORT, () => {
   // Optional: scheduled deadline-reminder emails for offline members. Stays dormant
   // (with a one-line log) unless FIREBASE_SERVICE_ACCOUNT + SMTP creds are configured.
   startDeadlineReminders();
+  // Every minute: submit and lock workspaces past their deadline (dormant without the Admin SDK key).
+  startServerDeadlines();
 });
 
 server.on('error', (err) => {

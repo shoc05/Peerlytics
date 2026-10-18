@@ -14,6 +14,19 @@ const router = Router();
  */
 router.post('/', async (req, res) => {
   try {
+    res.json(await analyzeSubmission(req.body || {}));
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    console.error('[check]', err);
+    res.status(500).json({ error: 'Submission check failed', message: err.message });
+  }
+});
+
+/**
+ * The analysis behind POST /api/check, also used by the server-side deadline job
+ * (backend/src/jobs/deadlines). Throws an error with status 400 for content under 10 characters.
+ */
+export async function analyzeSubmission(body) {
     const {
       text,
       html,
@@ -25,11 +38,11 @@ router.post('/', async (req, res) => {
       pasteEvents = [],
       difficulty = 1,
       studentName,
-    } = req.body || {};
+    } = body;
     const plainText = (text || '').trim() || stripHtml(html || '');
 
     if (plainText.length < 10) {
-      return res.status(400).json({ error: 'Content too short for analysis (min 10 characters).' });
+      throw Object.assign(new Error('Content too short for analysis (min 10 characters).'), { status: 400 });
     }
 
     // Both providers run simultaneously; neither failing blocks the submission.
@@ -96,7 +109,7 @@ router.post('/', async (req, res) => {
       },
     });
 
-    res.json({
+    return {
       success: true,
       report,
       extraction: {
@@ -104,12 +117,8 @@ router.post('/', async (req, res) => {
         html: html || '',
         wordCount: plainText.split(/\s+/).filter(Boolean).length,
       },
-    });
-  } catch (err) {
-    console.error('[check]', err);
-    res.status(500).json({ error: 'Submission check failed', message: err.message });
-  }
-});
+    };
+}
 
 router.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'peerlytics-check' });
