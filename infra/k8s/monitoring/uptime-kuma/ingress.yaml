@@ -1,0 +1,21 @@
+# Public status page through k3s's Traefik. Apply ONLY after creating the admin account
+# through a port-forward (README.md), or a stranger could claim the admin account first.
+# Replace status.peerlytics.example with the real host.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: uptime-kuma
+  namespace: monitoring
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: status.peerlytics.example
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: uptime-kuma
+                port:
+                  name: http

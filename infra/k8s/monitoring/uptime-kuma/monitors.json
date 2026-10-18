@@ -1,0 +1,13 @@
+{
+  "comment": "The monitors to create in Uptime Kuma (README.md, step 3). Every check runs every 60 s and counts as down after 2 failed retries. In-cluster URLs assume namespace peerlytics; replace the website URL with the real host.",
+  "interval": 60,
+  "retries": 2,
+  "notification": "Email (SMTP)",
+  "statusPage": { "title": "Peerlytics status", "slug": "peerlytics" },
+  "monitors": [
+    { "name": "Website", "type": "http", "url": "https://peerlytics.example", "expect": "200" },
+    { "name": "Backend API", "type": "http", "url": "http://peerlytics-backend.peerlytics.svc.cluster.local/api/health", "expect": "200", "keyword": "\"ok\":true" },
+    { "name": "Live editing (collab)", "type": "http", "url": "http://peerlytics-collab.peerlytics.svc.cluster.local/health", "expect": "200", "keyword": "\"ok\":true" },
+    { "name": "Notifications (notifier)", "type": "http", "url": "http://peerlytics-notifier.peerlytics.svc.cluster.local/health", "expect": "200" }
+  ]
+}
