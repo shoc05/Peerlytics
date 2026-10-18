@@ -1,0 +1,53 @@
+# E-mail alerts (step 5.3): errors above 5% for 5 minutes, a pod restarting, the backend down.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: peerlytics-alerts
+  namespace: monitoring
+spec:
+  groups:
+    - name: peerlytics
+      rules:
+        - alert: PeerlyticsHighErrorRate
+          expr: |
+            (
+              sum by (service) (rate(http_requests_total{namespace="peerlytics", status=~"5.."}[5m]))
+              /
+              sum by (service) (rate(http_requests_total{namespace="peerlytics"}[5m]))
+            ) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.service }}: more than 5% of requests fail"
+            description: "{{ $value | humanizePercentage }} of requests to {{ $labels.service }} returned a 5xx error over the last 5 minutes."
+
+        - alert: PeerlyticsPodRestarting
+          expr: increase(kube_pod_container_status_restarts_total{namespace="peerlytics"}[10m]) > 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.pod }} restarted"
+            description: "Container {{ $labels.container }} in {{ $labels.pod }} restarted {{ $value | humanize }} time(s) in the last 10 minutes."
+
+        - alert: PeerlyticsBackendDown
+          expr: |
+            up{namespace="peerlytics", service="peerlytics-backend"} == 0
+            or
+            absent(up{namespace="peerlytics", service="peerlytics-backend"})
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "The Peerlytics backend is down"
+            description: "Prometheus has not reached the backend's /metrics for 2 minutes."
+
+        - alert: PeerlyticsServiceDown
+          expr: up{namespace="peerlytics", service=~"peerlytics-(collab|notifier)"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.service }} is down"
+            description: "Prometheus has not reached {{ $labels.service }} for 5 minutes."

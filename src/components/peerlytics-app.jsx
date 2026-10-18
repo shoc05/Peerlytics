@@ -48,6 +48,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { logOut } from '../firebase/authService';
 import { createActivityEntry, formatRelativeTime, formatDuration, formatDate, formatDateTime } from '../utils/workspaceHelpers';
+import { effectiveDeadline, isExtended } from '../deadlines/effectiveDeadline';
+import ExtensionForm from '../deadlines/ExtensionForm';
 
 // ─── Sidebar nav icons (small inline SVGs, currentColor) ───
 const Svg = (props) => (
@@ -525,7 +527,7 @@ const PeerlyticsDashboard = () => {
   }, [isLecturer, activeGroupId, workspaceSubmissions.length, workspaceReports.length]);
 
   const profileWorkspaces = useMemo(
-    () => availableGroups.map((g) => ({ id: g.id, name: g.name, deadline: g.deadline })),
+    () => availableGroups.map((g) => ({ id: g.id, name: g.name, deadline: effectiveDeadline(g) })),
     [availableGroups]
   );
 
@@ -1532,7 +1534,7 @@ const PeerlyticsDashboard = () => {
                 darkMode={darkMode}
                 currentSubmissionReport={displayReports[0] || workspaceReports[0] || null}
                 workspaceCreatedAt={groupMeta?.createdDate || (groupMeta?.createdAt?.seconds ? groupMeta.createdAt.seconds * 1000 : null)}
-                deadline={groupMeta?.deadline || null}
+                deadline={effectiveDeadline(groupMeta)}
               />
               {false && (<>
               <div style={{
@@ -2183,7 +2185,7 @@ const PeerlyticsDashboard = () => {
                 groupMembers={groupMembers}
                 pushToast={pushToast}
                 pushActivity={pushActivity}
-                deadline={groupMeta?.deadline || null}
+                deadline={effectiveDeadline(groupMeta)}
                 locked={groupMeta?.locked === true}
                 createdDate={groupMeta?.createdDate || null}
                 submissions={submissionReports}
@@ -2295,7 +2297,7 @@ const PeerlyticsDashboard = () => {
                         </div>
                         <div style={{ fontSize: 15, fontWeight: 700, color: darkMode ? '#ededed' : '#1a1a1a', marginBottom: 4 }}>{ws.name}</div>
                         <div style={{ fontSize: 12, color: darkMode ? '#9a9a9a' : '#777', lineHeight: 1.5 }}>
-                          {ws.memberIds?.length || 0} members · {ws.deadline ? `Due ${formatDate(ws.deadline)}` : 'No deadline'}
+                          {ws.memberIds?.length || 0} members · {effectiveDeadline(ws) ? `Due ${formatDate(effectiveDeadline(ws))}${isExtended(ws) ? ' (extended)' : ''}` : 'No deadline'}
                         </div>
                       </div>
                     );
@@ -2443,9 +2445,12 @@ const PeerlyticsDashboard = () => {
                             <div>
                               <div style={{ fontWeight: '700', fontSize: 15, color: darkMode ? '#ededed' : '#1a1a1a' }}>{group.name}</div>
                               <div style={{ fontSize: 12, color: darkMode ? '#9a9a9a' : '#666', marginTop: 6 }}>
-                                {group.memberIds?.length || 0} members • Due {group.deadline ? formatDate(group.deadline) : 'Not set'}
+                                {group.memberIds?.length || 0} members • Due {effectiveDeadline(group) ? formatDate(effectiveDeadline(group)) : 'Not set'}{isExtended(group) ? ' (extended)' : ''}
                               </div>
                             </div>
+                            {isLecturer && (group.lecturerIds || []).includes(currentUser?.uid) && (
+                              <ExtensionForm group={group} darkMode={darkMode} onDone={() => pushToast('Deadline extended')} />
+                            )}
                             {isLecturer && (
                               <button
                                 type="button"

@@ -134,7 +134,8 @@ async function runReminderSweep() {
   for (const groupDoc of groupsSnap.docs) {
     const g = groupDoc.data();
     const groupId = groupDoc.id;
-    const deadlineMs = deadlineToMs(g.deadline);
+    // A lecturer's extension (step 4.6) replaces the original deadline.
+    const deadlineMs = deadlineToMs(g.extendedDeadline || g.deadline);
     // Only groups with a deadline that is in the future but within the reminder window.
     if (deadlineMs == null) continue;
     if (deadlineMs <= now || deadlineMs - now > windowMs) continue;

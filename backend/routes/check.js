@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { detectAIWithHuggingFace } from '../services/huggingFaceService.js';
 import { checkGrammarWithVWT } from '../services/vwtService.js';
 import { buildSubmissionReport } from '../services/reportGenerator.js';
+import { getFlag } from '../src/flags/index.js';
+import { reportTabs } from '../src/tabs/reportTabs.js';
 
 const router = Router();
 
@@ -38,6 +40,7 @@ export async function analyzeSubmission(body) {
       pasteEvents = [],
       difficulty = 1,
       studentName,
+      tabs,
     } = body;
     const plainText = (text || '').trim() || stripHtml(html || '');
 
@@ -46,8 +49,10 @@ export async function analyzeSubmission(body) {
     }
 
     // Both providers run simultaneously; neither failing blocks the submission.
+    // ai_detection_enabled off: detection is skipped and reported as unavailable.
+    const aiDetectionOn = await getFlag('ai_detection_enabled');
     const [aiResult, writing] = await Promise.all([
-      detectAIWithHuggingFace(plainText),
+      aiDetectionOn ? detectAIWithHuggingFace(plainText) : { available: false, reason: 'disabled' },
       checkGrammarWithVWT(plainText),
     ]);
 
@@ -108,6 +113,10 @@ export async function analyzeSubmission(body) {
         pasteEvents: pasteEvents.slice(0, 20),
       },
     });
+
+    // Document tab titles (step 2.3) stay on the report.
+    const keptTabs = reportTabs(tabs);
+    if (keptTabs) report.tabs = keptTabs;
 
     return {
       success: true,
