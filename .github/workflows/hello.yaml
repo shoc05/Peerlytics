@@ -1,0 +1,16 @@
+name: Hello Actions
+run-name: ${{ github.actor }} is trying GitHub Actions
+on: [push]
+
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Say where we are
+        run: echo "Triggered by ${{ github.event_name }} on branch ${{ github.ref_name }}, running on ${{ runner.os }}"
+      - name: Download the repo code
+        uses: actions/checkout@v6
+      - name: List the files
+        run: ls -la
+      - name: Show Node version
+        run: node --version
