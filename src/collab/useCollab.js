@@ -1,13 +1,19 @@
-// useCollab: connect one workspace file to the collab server (step 2.2, behind yjs_enabled).
+// useCollab: connect one workspace file to the collab server (step 2.2, behind yjs_enabled),
+// optionally keeping a copy on the device for offline editing (step 3.2, offline_enabled).
 //
 // status: 'off'         live editing not in use (flag off, not a document, not configured)
-//         'connecting'  waiting for the first sync; the editor stays read-only meanwhile
-//         'connected'   live; edits go through Yjs
-//         'unavailable' no sync within CONNECT_TIMEOUT_MS: fall back to the old sync
+//         'connecting'  waiting for content; the editor stays read-only meanwhile
+//         'connected'   synced with the server at least once this session
+//         'offline'     server not reached yet, editing the copy saved on this device;
+//                       changes merge when the connection comes back
+//         'unavailable' nothing to edit within CONNECT_TIMEOUT_MS: fall back to the old sync
 //         'refused'     the server said no (not a member, not submitted yet, bad token)
-// Callers use the live editor only while status is 'connecting' or 'connected'.
+// Also: synced (content is loaded, so the editor may edit), online (socket connected),
+// unsynced (local changes the server hasn't confirmed). Callers use the live editor only
+// while liveCollab(state) is non-null.
 import { useEffect, useState } from 'react';
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
+import { IndexeddbPersistence } from 'y-indexeddb';
 import * as Y from 'yjs';
 import { getFirebaseAuth } from '../firebase/config';
 import { logger } from '../utils/logger';
@@ -16,7 +22,7 @@ import { collabUrl, cursorColor, documentName, parseServerMessage } from './coll
 export const CONNECT_TIMEOUT_MS = 8000;
 const OFF = { status: 'off' };
 
-export function useCollab({ enabled, groupId, fileId, user, loadSeedHtml }) {
+export function useCollab({ enabled, offline = false, groupId, fileId, user, loadSeedHtml }) {
   const [state, setState] = useState(OFF);
   const url = collabUrl(import.meta.env);
   const uid = user?.uid;
@@ -28,23 +34,26 @@ export function useCollab({ enabled, groupId, fileId, user, loadSeedHtml }) {
       return undefined;
     }
 
-    let synced = false;
+    let serverSynced = false;
+    let localReady = false;
     let pendingSeed = false;
     const seedListeners = new Set();
+    const docName = documentName(groupId, fileId);
+    const ydoc = new Y.Doc();
     const update = (patch) => setState((s) => (s.ydoc === ydoc ? { ...s, ...patch } : s));
 
-    const ydoc = new Y.Doc();
     const websocketProvider = new HocuspocusProviderWebsocket({ url });
     const provider = new HocuspocusProvider({
       websocketProvider,
-      name: documentName(groupId, fileId),
+      name: docName,
       document: ydoc,
       // Called on every (re)connect, so an expired token is refreshed by the SDK.
       token: async () => (await getFirebaseAuth()?.currentUser?.getIdToken()) || '',
       onSynced: () => {
-        synced = true;
+        serverSynced = true;
         update({ status: 'connected', synced: true });
       },
+      onStatus: ({ status }) => update({ online: status === 'connected' }),
       onAuthenticationFailed: ({ reason }) => {
         logger.warn('[collab] refused:', reason);
         update({ status: 'refused', reason });
@@ -55,14 +64,28 @@ export function useCollab({ enabled, groupId, fileId, user, loadSeedHtml }) {
         else pendingSeed = true;
       },
     });
+    const onUnsynced = (unsynced) => update({ unsynced });
+    provider.on('unsyncedChanges', onUnsynced);
+
+    // Offline: the device copy (IndexedDB). Editing it before the server answers is allowed
+    // only when it came from an earlier visit; a first visit needs the server (and its
+    // one-time seed), so nothing typed offline can hide the document's existing text.
+    const local = offline ? new IndexeddbPersistence(`peerlytics:${uid}:${docName}`, ydoc) : null;
+    local?.on('synced', () => {
+      if (serverSynced || ydoc.store.clients.size === 0) return;
+      localReady = true;
+      update({ status: 'offline', synced: true });
+    });
 
     const timer = setTimeout(() => {
-      if (!synced) update({ status: 'unavailable' });
+      if (!serverSynced && !localReady) update({ status: 'unavailable' });
     }, CONNECT_TIMEOUT_MS);
 
     setState({
       status: 'connecting',
       synced: false,
+      online: false,
+      unsynced: 0,
       ydoc,
       provider,
       user: { name, color: cursorColor(uid) },
@@ -80,18 +103,20 @@ export function useCollab({ enabled, groupId, fileId, user, loadSeedHtml }) {
 
     return () => {
       clearTimeout(timer);
+      provider.off('unsyncedChanges', onUnsynced);
       provider.destroy();
       websocketProvider.destroy();
+      local?.destroy();
       ydoc.destroy();
     };
     // loadSeedHtml is read once per connection on purpose.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, groupId, fileId, uid, name, url]);
+  }, [enabled, offline, groupId, fileId, uid, name, url]);
 
   return state;
 }
 
 /** The collab object to hand to the editor, or null to use the old sync. */
 export function liveCollab(state) {
-  return state.status === 'connecting' || state.status === 'connected' ? state : null;
+  return ['connecting', 'connected', 'offline'].includes(state.status) ? state : null;
 }
