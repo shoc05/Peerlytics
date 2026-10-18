@@ -10,7 +10,13 @@ export function mapAuthError(error) {
     'auth/weak-password': 'Password is too weak. Use at least 6 characters.',
     'auth/too-many-requests': 'Too many attempts. Please wait a moment and try again.',
     'auth/network-request-failed': 'Network error. Check your connection and try again.',
-    'auth/operation-not-allowed': 'Email/password sign-in is not enabled in Firebase Console.',
+    'auth/operation-not-allowed': 'This sign-in method is not enabled in Firebase Console.',
+    'auth/popup-closed-by-user': 'Google sign-in was closed before it finished.',
+    'auth/cancelled-popup-request': 'Google sign-in was closed before it finished.',
+    'auth/popup-blocked': 'Your browser blocked the Google sign-in window. Allow pop-ups and try again.',
+    'auth/account-exists-with-different-credential':
+      'An account with this email already exists. Sign in with your password first.',
+    'auth/unauthorized-domain': 'Google sign-in is not allowed on this website address yet.',
   };
   if (messages[code]) return messages[code];
   if (error?.message?.includes('permission') || code === 'permission-denied') {

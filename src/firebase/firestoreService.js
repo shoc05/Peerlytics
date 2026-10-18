@@ -27,12 +27,13 @@ function db() {
 
 // ——— Users ———
 
-export async function createUserProfile({ uid, email, name, role, groupId, classSection }) {
+// No `role` here: the backend sets it as a custom claim and mirrors it (firestore.rules
+// rejects a client-written role).
+export async function createUserProfile({ uid, email, name, groupId, classSection }) {
   await setDoc(doc(db(), 'users', uid), {
     uid,
     email,
     name,
-    role,
     classSection: classSection || '',
     groupId: groupId || null,
     createdAt: serverTimestamp(),

@@ -11,6 +11,7 @@ import express from 'express';
 import cors from 'cors';
 import checkRouter from './routes/check.js';
 import analyzeRouter from './routes/analyze.js';
+import { createAuthRouter } from './src/auth/routes.js';
 import { startDeadlineReminders } from './services/reminderService.js';
 
 const app = express();
@@ -66,6 +67,7 @@ const analysisLimiter = rateLimit({ windowMs: 60_000, max: 20 });
 
 app.use('/api/check', analysisLimiter, checkRouter);
 app.use('/api/analyze', analysisLimiter, analyzeRouter);
+app.use('/api', createAuthRouter());
 
 app.use((err, _req, res, _next) => {
   console.error(err);

@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Logo from './Logo';
+import RolePicker from './RolePicker';
 import { useThemePreference } from '../hooks/useThemePreference';
 
 export default function ProtectedRoute({ children }) {
@@ -31,6 +32,11 @@ export default function ProtectedRoute({ children }) {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Signed in without a role yet (e.g. first Google sign-in): pick one before the dashboard.
+  if (user.role === null) {
+    return <RolePicker />;
   }
 
   return children;
