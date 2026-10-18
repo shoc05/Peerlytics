@@ -504,7 +504,7 @@ export async function persistOpenFile(groupId, userId, file, { html = '', text =
     contentHtml: html ?? file.contentHtml ?? '',
     lastEditedAt: Date.now(),
   };
-  await saveWorkspaceFile(groupId, payload);
+  // Body first: once the file is marked submitted, firestore.rules makes both read-only.
   if (file.type === 'document' || html || text) {
     await saveDocumentContent({
       fileId: file.id,
@@ -514,6 +514,7 @@ export async function persistOpenFile(groupId, userId, file, { html = '', text =
       text: text || '',
     });
   }
+  await saveWorkspaceFile(groupId, payload);
   return payload;
 }
 
@@ -756,6 +757,18 @@ export async function saveGradeOverride(groupId, memberId, grade, opts = {}) {
     lecturerName,
     updatedAt: serverTimestamp(),
   });
+  // The append-only override log (firestore.rules: groups/{groupId}/overrides).
+  if (isOverride) {
+    await addDoc(collection(db(), 'groups', groupId, 'overrides'), {
+      memberId: String(memberId),
+      grade,
+      suggestedGrade,
+      reason: String(reason || ''),
+      lecturerId,
+      lecturerName,
+      createdAt: serverTimestamp(),
+    });
+  }
 }
 
 export async function clearGradeOverride(groupId, memberId) {

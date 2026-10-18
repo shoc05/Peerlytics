@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import FirebaseGate from './components/FirebaseGate';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AuthProvider } from './context/AuthContext';
+import { FlagsProvider } from './flags/FlagsProvider';
 import ProtectedRoute from './components/ProtectedRoute';
 import GuestRoute from './components/GuestRoute';
 import Login from './components/Login';
@@ -13,6 +14,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <FirebaseGate>
+      <FlagsProvider>
       <AuthProvider>
         <BrowserRouter>
           <Routes>
@@ -31,6 +33,7 @@ export default function App() {
           </Routes>
         </BrowserRouter>
       </AuthProvider>
+      </FlagsProvider>
       </FirebaseGate>
     </ErrorBoundary>
   );
