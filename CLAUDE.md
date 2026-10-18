@@ -37,7 +37,9 @@ Config: a single `.env` at the repo root serves both packages. Vite reads `VITE_
 
 **Backend.** `backend/server.js` is a small Express app: `/api/health`, `/api/check`, `/api/analyze`, an in-memory per-IP rate limiter, and an optional node-cron deadline-reminder emailer (`services/reminderService.js`, Firebase Admin + SMTP) that stays dormant without credentials. Endpoints are currently unauthenticated.
 
-**Not part of the app.** `peerlytics-app.jsx` and `peerlytics-demo.html` at the repo root are an old standalone prototype with hard-coded sample members; nothing imports them. `src/firebase/firebase.js` is the unused Firebase console snippet. `scripts/*.cjs|js` are one-off codemods that rewrote `peerlytics-app.jsx`/`WorkspacePanel.jsx` during earlier refactors; don't run them.
+**API client.** Backend calls go through `src/api/` (`index.js` wires `client.js` to Firebase Auth), which sends `Authorization: Bearer <ID token>` on everything except `/api/health` and throws `ApiError { status, code, retryAfter }`. `src/services/api.js` only re-exports it. Student HTML is rendered only through `utils/sanitizeHtml.js` (DOMPurify).
+
+**Not part of the app.** `archive/` holds the old standalone prototype (`peerlytics-app.jsx`, `peerlytics-demo.html`, its `SETUP-prototype.md`) and the unused Firebase console snippet; nothing imports them. `scripts/*.cjs|js` are one-off codemods that rewrote `peerlytics-app.jsx`/`WorkspacePanel.jsx` during earlier refactors; don't run them.
 
 See `docs/audit.md` for what is done, partly done and missing against the rules below.
 

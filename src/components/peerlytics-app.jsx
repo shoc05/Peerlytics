@@ -16,6 +16,7 @@ const ReportsPanel = lazy(() => import('./ReportsPanel'));
 const AdminPanel = lazy(() => import('./AdminPanel'));
 import { enrichMembers } from '../utils/scoring';
 import { gradeSubmission, writingFromReport } from '../utils/behaviorGrade';
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 import {
   inviteLecturerByEmail,
   createProjectGroup,
@@ -1178,7 +1179,7 @@ const PeerlyticsDashboard = () => {
                 fontFamily: '"Times New Roman", Times, serif', fontSize: 15, lineHeight: 1.8,
               }}>
                 {fileViewer.html
-                  ? <div dangerouslySetInnerHTML={{ __html: fileViewer.html }} />
+                  ? <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(fileViewer.html) }} />
                   : fileViewer.text
                     ? <div style={{ whiteSpace: 'pre-wrap' }}>{fileViewer.text}</div>
                     : <div style={{ color: '#888', textAlign: 'center', padding: 40 }}>No file content was captured with this submission.</div>}
@@ -1790,7 +1791,9 @@ const PeerlyticsDashboard = () => {
                       onClick={() => {
                         setFileViewer({
                           name: effectiveLecturerSubmission.fileName || effectiveLecturerSubmission.folderName || 'Submission',
-                          html: lecturerDocContent.html,
+                          // Sanitised up front so HTML that is empty once cleaned falls back
+                          // to the text or the "no content" message instead of a blank page.
+                          html: sanitizeHtml(lecturerDocContent.html),
                           text: lecturerDocContent.text,
                         });
                       }}

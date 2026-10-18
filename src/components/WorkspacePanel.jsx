@@ -1015,17 +1015,6 @@ export default function WorkspacePanel({
     }
   };
 
-  const simulatePaste = () => {
-    if (readOnly) return;
-    const prev = editorContent;
-    const block =
-      '\n\n[Pasted block: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae.]\n\n';
-    const next = prev + block;
-    const pasteRanges = [{ start: prev.length, end: next.length }];
-    setEditorContent(next);
-    triggerPaste(pasteRanges, next, 'paste-large', block.trim());
-  };
-
   const onBlurSave = () => {
     if (!openFile || readOnly) return;
     const prev = contentBeforeEditRef.current;
