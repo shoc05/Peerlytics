@@ -1,17 +1,47 @@
+import { signOut } from 'firebase/auth';
 import { logger } from '../utils/logger';
+import { getFirebaseAuth } from '../firebase/config';
+import { isTokenRevoked } from '../utils/authRole';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+// Every backend call except /api/health sends the Firebase ID token (docs/auth-contract.md).
+// The SDK refreshes the token itself; pass forceRefresh after a role change.
+export async function authHeaders({ forceRefresh = false } = {}) {
+  const user = getFirebaseAuth()?.currentUser;
+  if (!user) return {};
+  return { Authorization: `Bearer ${await user.getIdToken(forceRefresh)}` };
+}
+
+async function apiFetch(path, { method = 'GET', body } = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (isTokenRevoked(res.status, data)) {
+    // An admin changed this user's role; the old session must end.
+    const auth = getFirebaseAuth();
+    if (auth) await signOut(auth);
+  }
+  if (!res.ok) {
+    const err = new Error(data.error || data.message || `Request failed (${res.status})`);
+    err.code = data.code;
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+/** Pick student or lecturer once, right after sign-up. Returns { role, collegeId }. */
+export function chooseRole(role) {
+  return apiFetch('/api/auth/role', { method: 'POST', body: { role } });
+}
+
 export async function submitForCheck(payload) {
   try {
-    const res = await fetch(`${API_BASE}/api/check`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || data.message || 'Check failed');
-    return data;
+    return await apiFetch('/api/check', { method: 'POST', body: payload });
   } catch (err) {
     // ANY failure (backend unreachable, OpenAI quota exceeded, API/server error)
     // must NOT block submission. Return an "AI evaluation unavailable" report so the

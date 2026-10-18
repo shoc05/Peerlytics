@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Logo from './Logo';
 import AuthAlert from './AuthAlert';
 import AuthThemeToggle from './AuthThemeToggle';
+import GoogleSignInButton from './GoogleSignInButton';
 import { signIn } from '../firebase/authService';
 import { useAuth } from '../context/AuthContext';
 import { mapAuthError } from '../utils/authErrors';
@@ -33,8 +34,8 @@ export default function Login() {
     setSuccess('');
     setLoading(true);
     try {
-      const profile = await signIn(email, password);
-      applyProfile(profile);
+      const sessionUser = await signIn(email, password);
+      applyProfile(sessionUser);
       setSuccess('Signed in successfully! Redirecting to dashboard…');
       setTimeout(() => navigate('/dashboard', { replace: true }), 500);
     } catch (err) {
@@ -82,6 +83,8 @@ export default function Login() {
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
+
+        <GoogleSignInButton darkMode={darkMode} disabled={loading} onError={setError} />
 
         <p style={{ textAlign: 'center', color: authSubtitleStyle(darkMode).color, fontSize: 13, marginTop: 20 }}>
           No account?{' '}
