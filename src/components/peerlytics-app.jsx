@@ -14,6 +14,7 @@ const StoragePanel = lazy(() => import('./StoragePanel'));
 const CalendarPanel = lazy(() => import('./CalendarPanel'));
 const ReportsPanel = lazy(() => import('./ReportsPanel'));
 const AdminPanel = lazy(() => import('./AdminPanel'));
+const CoursesPanel = lazy(() => import('../courses/CoursesPanel'));
 import { enrichMembers } from '../utils/scoring';
 import { gradeSubmission, writingFromReport } from '../utils/behaviorGrade';
 import { sanitizeHtml } from '../utils/sanitizeHtml';
@@ -51,6 +52,8 @@ import { logOut } from '../firebase/authService';
 import { createActivityEntry, formatRelativeTime, formatDuration, formatDate, formatDateTime } from '../utils/workspaceHelpers';
 import { effectiveDeadline, isExtended } from '../deadlines/effectiveDeadline';
 import ExtensionForm from '../deadlines/ExtensionForm';
+import { courseApi } from '../api';
+import { isCourseApiReady } from '../courses/courseApi';
 
 // ─── Sidebar nav icons (small inline SVGs, currentColor) ───
 const Svg = (props) => (
@@ -67,6 +70,9 @@ const NavIconStorage = (p) => (
 );
 const NavIconCalendar = (p) => (
   <Svg {...p}><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></Svg>
+);
+const NavIconCourses = (p) => (
+  <Svg {...p}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></Svg>
 );
 const NavIconFiles = (p) => (
   <Svg {...p}><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6" /></Svg>
@@ -582,6 +588,8 @@ const PeerlyticsDashboard = () => {
       offline: 'Offline Mode',
       sync: 'Sync Changes',
       projects: 'Projects',
+      courses: 'Courses',
+      notAvailableYet: 'Not available yet',
       analytics: 'Analytics',
       analysis: 'Analysis',
       storage: 'Submitted Work',
@@ -612,6 +620,8 @@ const PeerlyticsDashboard = () => {
       offline: 'འབྲེལ་མེད།',
       sync: 'མཐུན་སྒྲིགས།',
       projects: 'ལས་འགུལ།',
+      courses: 'སློབ་ཚན།',
+      notAvailableYet: 'ད་ལྟོ་ཚུན་ མིན་འདུག',
       analytics: 'དབྱེ་ཞིབ།',
       analysis: 'དབྱེ་ཞིབ།',
       storage: 'བཙུགས་པའི་ལཱ།',
@@ -1198,6 +1208,8 @@ const PeerlyticsDashboard = () => {
           {/* Main nav — spec: Projects · Analytics · Storage · Calendar */}
           {[
             { id: 'projects', label: t('projects'), icon: NavIconProjects },
+            // Courses (step 1.7) stays visible but marked until the course API exists.
+            { id: 'courses', label: t('courses'), icon: NavIconCourses, note: isCourseApiReady(courseApi) ? null : t('notAvailableYet') },
             // Analytics is not in the main nav: students don't get it at all, and for
             // lecturers it lives in "Analytics Tools" as "Analysis".
             { id: 'storage', label: t('storage'), icon: NavIconStorage },
@@ -1225,7 +1237,16 @@ const PeerlyticsDashboard = () => {
                 }`}
               >
                 <Icon className="w-4 h-4 flex-shrink-0 transition-transform group-hover:scale-110" />
-                <span>{item.label}</span>
+                {item.note ? (
+                  <span className="min-w-0 leading-tight">
+                    <span className="block">{item.label}</span>
+                    <span className={`block text-[10px] font-semibold ${
+                      isActive ? 'text-white/90' : darkMode ? 'text-amber-200' : 'text-amber-800'
+                    }`}>{item.note}</span>
+                  </span>
+                ) : (
+                  <span>{item.label}</span>
+                )}
                 {unread > 0 && (
                   <span className="ml-auto bg-rose-500 text-white rounded-full text-[10px] px-2 py-0.5 font-bold ring-2 ring-rose-500/30 animate-pulse">
                     {unread}
@@ -2360,6 +2381,17 @@ const PeerlyticsDashboard = () => {
                   pushToast(err.message || 'Could not delete submission');
                 }
               }}
+              pushToast={pushToast}
+            />
+          )}
+
+          {/* COURSES (step 1.7) */}
+          {activeTab === 'courses' && (
+            <CoursesPanel
+              api={courseApi}
+              language={language}
+              darkMode={darkMode}
+              isLecturer={isLecturer}
               pushToast={pushToast}
             />
           )}
