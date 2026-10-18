@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { injectHighlightsIntoHtml, injectHighlightsIntoText } from '../utils/highlightHelpers';
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 
 const scoreText = (score, invert = false) => {
   const v = invert ? 100 - score : score;
@@ -180,9 +181,11 @@ export default function ReportCard({ report, documentHtml = '', documentText = '
                 className="px-5 py-4 rounded-lg bg-white text-slate-900 text-[13px] leading-[1.8] max-h-[360px] overflow-y-auto border border-slate-200 whitespace-pre-wrap break-words"
                 style={{ fontFamily: '"Times New Roman", Times, serif' }}
                 dangerouslySetInnerHTML={{
-                  __html: docHtml
+                  // The highlighter already escapes the text; sanitising again guards against
+                  // a future change to it letting student HTML through.
+                  __html: sanitizeHtml(docHtml
                     ? injectHighlightsIntoHtml(docHtml, flaggedContent || [])
-                    : injectHighlightsIntoText(docText, flaggedContent || []),
+                    : injectHighlightsIntoText(docText, flaggedContent || [])),
                 }}
               />
               {(!flaggedContent || flaggedContent.length === 0) && (

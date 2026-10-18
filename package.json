@@ -26,6 +26,7 @@
     "@tiptap/pm": "^2.27.3",
     "@tiptap/react": "^2.6.6",
     "@tiptap/starter-kit": "^2.6.6",
+    "dompurify": "^3.4.17",
     "firebase": "^10.14.0",
     "react": ">=16.8.0",
     "react-dom": ">=16.8.0",
@@ -47,6 +48,7 @@
     "firebase-tools": "^15.33.0",
     "globals": "^17.13.0",
     "happy-dom": "^15.11.7",
+    "jsdom": "^25.0.1",
     "postcss": "^8.5.15",
     "tailwindcss": "^3.4.19",
     "vite": "^4.4.0"
