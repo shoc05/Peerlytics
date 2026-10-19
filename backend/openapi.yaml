@@ -13,7 +13,8 @@ info:
 
     **Conventions**
 
-    - Every path is under `/api`. Every route needs `Authorization: Bearer <Firebase ID token>`, except `GET /api/health`.
+    - Every path is under `/api`. Every route needs `Authorization: Bearer <Firebase ID token>`, except `GET /api/health`
+      and `GET /api/reports/report.xsl` (a fixed stylesheet with no data in it, which browsers fetch without a token).
     - `x-roles` lists the custom-claim roles allowed (`requireRole(...)`). `x-access` is the extra row-level rule
       the route checks against PostgreSQL, for example "lecturer of this course" (an `enrolments` row with
       `course_role = 'lecturer'`). Failing either check gives `403 FORBIDDEN`. An id the caller isn't allowed to
@@ -1433,6 +1434,26 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/NotSubmitted' }
+
+  /reports/report.xsl:
+    get:
+      tags: [Reports]
+      operationId: getReportStylesheet
+      summary: The XSLT stylesheet that turns report.xml into a printable HTML page
+      description: |
+        No token: the browser fetches it when it opens report.xml (the xml-stylesheet processing instruction points
+        here), and it contains no data. Red marks sentences flagged as possibly AI-generated; yellow marks students
+        with large pastes. Per-student and group totals are XPath expressions, explained in a comment at the top.
+      security: []
+      x-roles: [public]
+      x-owner: Sonam
+      x-step: '2.10'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/xsl:
+              schema: { type: string }
 
   # ───────────────────────────── Peer evaluation ─────────────────────────────
   /workspaces/{workspaceId}/peer-evaluations:
