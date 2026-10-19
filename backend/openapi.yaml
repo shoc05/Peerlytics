@@ -1,0 +1,2462 @@
+openapi: 3.1.0
+info:
+  title: Peerlytics API
+  version: 0.1.0
+  summary: Collaborative writing with fair, explained group grading.
+  description: |
+    Step 1.1 (PEER-21) · Owner: Sonam · Status: agreed contract.
+
+    This is the contract for every backend route the team builds. Build each route against it and
+    check its body with Zod `.strict()` (the same rule as `additionalProperties: false` here).
+    If a shape has to change, change this file in its own PR first. Tables are in `docs/db-schema.md`,
+    and roles, tokens and auth errors are in `docs/auth-contract.md`.
+
+    **Conventions**
+
+    - Every path is under `/api`. Every route needs `Authorization: Bearer <Firebase ID token>`, except `GET /api/health`.
+    - `x-roles` lists the custom-claim roles allowed (`requireRole(...)`). `x-access` is the extra row-level rule
+      the route checks against PostgreSQL, for example "lecturer of this course" (an `enrolments` row with
+      `course_role = 'lecturer'`). Failing either check gives `403 FORBIDDEN`. An id the caller isn't allowed to
+      know about gives `404 NOT_FOUND`, so ids can't be probed.
+    - `x-owner` and `x-step` show who builds the route and in which step. `x-status: existing` means the route is
+      already on `develop` and this file only documents it.
+    - Errors are `{ "error": "<for people>", "code": "<for programs>", "details"?: [{ path, message }] }`.
+      `details` lists Zod issues and never echoes the submitted values.
+    - Lecturers see a workspace's content, analysis and grades only after it is submitted
+      (`409 NOT_SUBMITTED` before then). AI likelihood is a signal, not proof, and every UI that shows it says so.
+    - Times are ISO 8601 with an offset. Scores and grades are 0–10 with two decimals.
+  contact:
+    name: Peerlytics team (CTE412, CST)
+servers:
+  - url: http://localhost:5000/api
+    description: Local development (npm run dev:server)
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Health
+    description: Liveness and readiness, no token needed.
+  - name: Auth
+    description: Roles and claims (Kezang, step 1.2). Documented here so the contract is complete.
+  - name: Courses
+    description: Courses and the course site (Overview, Assignments, Groups, Members, Grades).
+  - name: Enrolment
+    description: Join codes and course members.
+  - name: Announcements
+    description: The course Overview tab.
+  - name: Assignments
+    description: Brief, deadline and rubric weights.
+  - name: Groups
+    description: Group workspaces (workspace = project = group). The id is the Firestore `groups/{id}`.
+  - name: Extensions
+    description: Per-group deadline extensions (Kezang, step 4.6).
+  - name: Tasks
+    description: Group task list; feeds the Tasks score.
+  - name: Submissions
+    description: Tracking events and submitting a workspace.
+  - name: Analysis
+    description: Write-once AI and writing analysis per submission.
+  - name: Grades
+    description: Suggested grades, lecturer overrides and CSV export.
+  - name: Reports
+    description: XML report with an XSLT stylesheet.
+  - name: Peer evaluation
+    description: Teammate ratings behind peer_eval_enabled; not part of the grade.
+  - name: Comparison
+    description: Every group in a course side by side, behind course_dashboard_enabled.
+  - name: Usage
+    description: AI calls, tokens and cost per college (Tshewang, step 3.10).
+  - name: Data deletion
+    description: Deleting personal data on request (Tshewang, step 4.9).
+  - name: Inline comments
+    description: Lecturer comments anchored to submitted text (Kezang, step 4.6).
+  - name: Legacy
+    description: Old analysis routes, removed in step 2.4.
+
+paths:
+  # ───────────────────────────── Health and auth ─────────────────────────────
+  /health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Liveness and readiness for Docker and Kubernetes probes
+      security: []
+      x-roles: [public]
+      x-owner: Sonam
+      x-step: '0.6'
+      x-status: existing
+      responses:
+        '200':
+          description: The server is up. `db` is `down` when PostgreSQL can't be reached; the process still answers.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      operationId: getMe
+      summary: The signed-in user as the backend sees them
+      description: Needs `requireAuth` only, so it works before a role is picked.
+      x-roles: [any signed-in user]
+      x-owner: Kezang
+      x-step: '1.2'
+      x-status: existing
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/role:
+    post:
+      tags: [Auth]
+      operationId: chooseRole
+      summary: Pick student or lecturer, once, at sign-up
+      x-roles: [any signed-in user without a role]
+      x-owner: Kezang
+      x-step: '1.2'
+      x-status: existing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role]
+              properties:
+                role: { type: string, enum: [student, lecturer] }
+      responses:
+        '200':
+          description: The claim and its Firestore mirror are set. The client then calls `getIdToken(true)`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [role, collegeId]
+                properties:
+                  role: { $ref: '#/components/schemas/Role' }
+                  collegeId: { type: [string, 'null'] }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: '`ROLE_ALREADY_SET`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /admin/users/{uid}/role:
+    post:
+      tags: [Auth]
+      operationId: setUserRole
+      summary: Set anyone's role (superAdmin)
+      description: Revokes the target's refresh tokens and writes `role.changed` to `audit_log`.
+      x-roles: [superAdmin]
+      x-owner: Kezang
+      x-step: '1.2'
+      x-status: existing
+      parameters:
+        - $ref: '#/components/parameters/Uid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role]
+              properties:
+                role: { $ref: '#/components/schemas/Role' }
+                collegeId: { type: [string, 'null'], default: null }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [uid, role, collegeId]
+                properties:
+                  uid: { type: string }
+                  role: { $ref: '#/components/schemas/Role' }
+                  collegeId: { type: [string, 'null'] }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: '`FORBIDDEN`, or `CANNOT_CHANGE_OWN_ROLE` when `uid` is the caller'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: '`USER_NOT_FOUND`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ───────────────────────────── Courses and enrolment ─────────────────────────────
+  /courses:
+    get:
+      tags: [Courses]
+      operationId: listMyCourses
+      summary: My courses
+      description: |
+        Students and lecturers get the courses they are enrolled in. A collegeAdmin gets every course in their
+        college, and a superAdmin every course. Archived courses are left out unless `includeArchived=true`.
+      x-roles: [student, lecturer, collegeAdmin, superAdmin]
+      x-owner: Sonam
+      x-step: '2.1'
+      parameters:
+        - name: includeArchived
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [courses]
+                properties:
+                  courses:
+                    type: array
+                    items: { $ref: '#/components/schemas/CourseSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Courses]
+      operationId: createCourse
+      summary: Create a course
+      description: |
+        Creates the course with a random 8-character join code and enrols the caller as its lecturer
+        (`joined_via = 'owner'`). `collegeId` comes from the caller's claim.
+      x-roles: [lecturer]
+      x-owner: Sonam
+      x-step: '2.1'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseCreate' }
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location: { schema: { type: string }, description: '/api/courses/{courseId}' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Course' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /courses/join:
+    post:
+      tags: [Enrolment]
+      operationId: joinCourse
+      summary: Join a course with its join code
+      description: The code is case-insensitive and spaces are removed. Limited to 10 attempts a minute per user, so codes can't be guessed.
+      x-roles: [student]
+      x-owner: Sonam
+      x-step: '2.1'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [joinCode]
+              properties:
+                joinCode: { type: string, minLength: 8, maxLength: 12, examples: ['K7QM-3XPA', 'k7qm3xpa'] }
+      responses:
+        '200':
+          description: Enrolled as a student
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseSummary' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: '`FORBIDDEN` (not a student), or `JOIN_DISABLED` (the lecturer turned joining off, or the course is archived)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: '`INVALID_JOIN_CODE`: no course has that code'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: '`ALREADY_ENROLLED`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /courses/{courseId}:
+    parameters:
+      - $ref: '#/components/parameters/CourseId'
+    get:
+      tags: [Courses]
+      operationId: getCourse
+      summary: One course (the course site header)
+      description: '`joinCode` is only included for the course''s lecturers and admins.'
+      x-roles: [student, lecturer, collegeAdmin, superAdmin]
+      x-access: Enrolled in the course, or collegeAdmin of its college, or superAdmin
+      x-owner: Sonam
+      x-step: '2.1'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Course' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Courses]
+      operationId: updateCourse
+      summary: Edit a course, turn joining on or off, archive it
+      x-roles: [lecturer]
+      x-access: Lecturer of this course
+      x-owner: Sonam
+      x-step: '2.1'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Course' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /courses/{courseId}/join-code:
+    parameters:
+      - $ref: '#/components/parameters/CourseId'
+    post:
+      tags: [Enrolment]
+      operationId: resetJoinCode
+      summary: Make a new join code (the old one stops working)
+      description: Writes `course.join_code_reset` to `audit_log`. Students who already joined stay enrolled.
+      x-roles: [lecturer]
+      x-access: Lecturer of this course
+      x-owner: Sonam
+      x-step: '2.1'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [joinCode]
+                properties:
+                  joinCode: { $ref: '#/components/schemas/JoinCode' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /courses/{courseId}/members:
+    parameters:
+      - $ref: '#/components/parameters/CourseId'
+    get:
+      tags: [Enrolment]
+      operationId: listCourseMembers
+      summary: The Members tab
+      description: Students see names and course roles only. Lecturers and admins also see emails and each student's group per assignment.
+      x-roles: [student, lecturer, collegeAdmin, superAdmin]
+      x-access: Enrolled in the course, or collegeAdmin of its college, or superAdmin
+      x-owner: Sonam
+      x-step: '2.1'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [members]
+                properties:
+                  members:
+                    type: array
+                    items: { $ref: '#/components/schemas/CourseMember' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /courses/{courseId}/members/{uid}:
+    parameters:
+      - $ref: '#/components/parameters/CourseId'
+      - $ref: '#/components/parameters/Uid'
+    delete:
+      tags: [Enrolment]
+      operationId: removeCourseMember
+      summary: Remove a student from the course
+      description: Also removes them from groups that haven't submitted yet. Submitted groups keep their history.
+      x-roles: [lecturer]
+      x-access: Lecturer of this course; the target is a student in it
+      x-owner: Sonam
+      x-step: '2.1'
+      responses:
+        '204': { description: Removed }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────────── Announcements ─────────────────────────────
+  /courses/{courseId}/announcements:
+    parameters:
+      - $ref: '#/components/parameters/CourseId'
+    get:
+      tags: [Announcements]
+      operationId: listAnnouncements
+      summary: The Overview tab, pinned first, newest first
+      x-roles: [student, lecturer, collegeAdmin, superAdmin]
+      x-access: Enrolled in the course, or collegeAdmin of its college, or superAdmin
+      x-owner: Sonam
+      x-step: '2.1'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [announcements]
+                properties:
+                  announcements:
+                    type: array
+                    items: { $ref: '#/components/schemas/Announcement' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Announcements]
+      operationId: createAnnouncement
+      summary: Post an announcement
+      description: Enrolled students get an in-app notification (notifier, step 2.5).
+      x-roles: [lecturer]
+      x-access: Lecturer of this course; the course is not archived
+      x-owner: Sonam
+      x-step: '2.1'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AnnouncementCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Announcement' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /announcements/{announcementId}:
+    parameters:
+      - $ref: '#/components/parameters/AnnouncementId'
+    patch:
+      tags: [Announcements]
+      operationId: updateAnnouncement
+      summary: Edit or pin an announcement
+      x-roles: [lecturer]
+      x-access: Lecturer of the announcement's course
+      x-owner: Sonam
+      x-step: '2.1'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AnnouncementUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Announcement' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Announcements]
+      operationId: deleteAnnouncement
+      summary: Delete an announcement
+      x-roles: [lecturer]
+      x-access: Lecturer of the announcement's course
+      x-owner: Sonam
+      x-step: '2.1'
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────────── Assignments ─────────────────────────────
+  /courses/{courseId}/assignments:
+    parameters:
+      - $ref: '#/components/parameters/CourseId'
+    get:
+      tags: [Assignments]
+      operationId: listAssignments
+      summary: The Assignments tab, by deadline
+      description: For a student, each item also has `myWorkspaceId` (or null) and `effectiveDeadline` for their group.
+      x-roles: [student, lecturer, collegeAdmin, superAdmin]
+      x-access: Enrolled in the course, or collegeAdmin of its college, or superAdmin
+      x-owner: Sonam
+      x-step: '2.1'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assignments]
+                properties:
+                  assignments:
+                    type: array
+                    items: { $ref: '#/components/schemas/Assignment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Assignments]
+      operationId: createAssignment
+      summary: Create an assignment with a brief, deadline and rubric weights
+      description: Weights left out default to 0.25 each. If any are given, all four must be given and add up to 1.00.
+      x-roles: [lecturer]
+      x-access: Lecturer of this course; the course is not archived
+      x-owner: Sonam
+      x-step: '2.1'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssignmentCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Assignment' }
+        '400':
+          description: '`INVALID_BODY` (including weights that don''t add up to 1.00) or `DEADLINE_IN_PAST`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /assignments/{assignmentId}:
+    parameters:
+      - $ref: '#/components/parameters/AssignmentId'
+    get:
+      tags: [Assignments]
+      operationId: getAssignment
+      summary: One assignment
+      x-roles: [student, lecturer, collegeAdmin, superAdmin]
+      x-access: Enrolled in its course, or collegeAdmin of its college, or superAdmin
+      x-owner: Sonam
+      x-step: '2.1'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Assignment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Assignments]
+      operationId: updateAssignment
+      summary: Edit an assignment
+      description: |
+        Changing `deadline` moves it for every group without an extension. Changing `weights` affects grades
+        computed from now on; grades already computed keep the weights they were computed with.
+      x-roles: [lecturer]
+      x-access: Lecturer of its course
+      x-owner: Sonam
+      x-step: '2.1'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssignmentUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Assignment' }
+        '400':
+          description: '`INVALID_BODY` or `DEADLINE_IN_PAST`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Assignments]
+      operationId: deleteAssignment
+      summary: Delete an assignment that has no submissions
+      x-roles: [lecturer]
+      x-access: Lecturer of its course
+      x-owner: Sonam
+      x-step: '2.1'
+      responses:
+        '204': { description: 'Deleted, with its empty workspaces' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`HAS_SUBMISSIONS`: at least one group has submitted'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ───────────────────────────── Groups (workspaces) ─────────────────────────────
+  /assignments/{assignmentId}/groups:
+    parameters:
+      - $ref: '#/components/parameters/AssignmentId'
+    get:
+      tags: [Groups]
+      operationId: listGroups
+      summary: The Groups tab for one assignment
+      description: Students see every group's name and members, but only open their own workspace.
+      x-roles: [student, lecturer, collegeAdmin, superAdmin]
+      x-access: Enrolled in its course, or collegeAdmin of its college, or superAdmin
+      x-owner: Sonam
+      x-step: '2.1'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [groups, ungroupedStudents]
+                properties:
+                  groups:
+                    type: array
+                    items: { $ref: '#/components/schemas/Workspace' }
+                  ungroupedStudents:
+                    type: array
+                    description: Enrolled students with no group for this assignment. Empty for students.
+                    items: { $ref: '#/components/schemas/UserRef' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Groups]
+      operationId: createGroup
+      summary: Create a group workspace by hand
+      description: Creates the PostgreSQL row and the Firestore `groups/{id}` document together. Members get an in-app notification.
+      x-roles: [lecturer]
+      x-access: Lecturer of its course
+      x-owner: Sonam
+      x-step: '2.1'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkspaceCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workspace' }
+        '400':
+          description: '`INVALID_BODY`, or `NOT_ENROLLED` when a member isn''t a student in the course'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`ALREADY_IN_GROUP` (a member already has a group for this assignment) or `CONFLICT` (the name is taken)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /assignments/{assignmentId}/groups/auto:
+    parameters:
+      - $ref: '#/components/parameters/AssignmentId'
+    post:
+      tags: [Groups]
+      operationId: autoCreateGroups
+      summary: Shuffle ungrouped students into random groups
+      description: |
+        Takes every student enrolled in the course who has no group for this assignment, shuffles them
+        (`crypto.randomInt`, Fisher–Yates) and splits them into groups of `size`. If the remainder is smaller
+        than `size`, those students join the last groups one each, so groups are `size` or `size + 1`, never
+        smaller. Groups are named "Group N", continuing after existing ones. Each member is notified, and
+        `groups.auto_created` is written to `audit_log`. It runs in one transaction: all groups or none.
+      x-roles: [lecturer]
+      x-access: Lecturer of its course
+      x-owner: Sonam
+      x-step: '3.7'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [size]
+              properties:
+                size: { type: integer, minimum: 2, maximum: 20 }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [groups]
+                properties:
+                  groups:
+                    type: array
+                    items: { $ref: '#/components/schemas/Workspace' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`NOT_ENOUGH_STUDENTS`: fewer ungrouped students than `size`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /me/workspaces:
+    get:
+      tags: [Groups]
+      operationId: listMyWorkspaces
+      summary: My groups across all my courses (the student dashboard)
+      x-roles: [student]
+      x-owner: Sonam
+      x-step: '2.1'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspaces]
+                properties:
+                  workspaces:
+                    type: array
+                    items: { $ref: '#/components/schemas/Workspace' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /workspaces/{workspaceId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    get:
+      tags: [Groups]
+      operationId: getWorkspace
+      summary: One workspace
+      x-roles: [student, lecturer, collegeAdmin, superAdmin]
+      x-access: A member, or a lecturer of its course (name, members and status before submission; everything after)
+      x-owner: Sonam
+      x-step: '2.1'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workspace' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Groups]
+      operationId: updateWorkspace
+      summary: Rename a workspace
+      x-roles: [lecturer]
+      x-access: Lecturer of its course
+      x-owner: Sonam
+      x-step: '2.1'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workspace' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`CONFLICT`: the name is taken in this assignment'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /workspaces/{workspaceId}/members:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    post:
+      tags: [Groups]
+      operationId: addWorkspaceMember
+      summary: Add a student to a group
+      x-roles: [lecturer]
+      x-access: Lecturer of its course; the workspace is `open`
+      x-owner: Sonam
+      x-step: '2.1'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [userId]
+              properties:
+                userId: { $ref: '#/components/schemas/Uid' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workspace' }
+        '400':
+          description: '`INVALID_BODY` or `NOT_ENROLLED`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`ALREADY_IN_GROUP` or `WORKSPACE_SUBMITTED`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /workspaces/{workspaceId}/members/{uid}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/Uid'
+    delete:
+      tags: [Groups]
+      operationId: removeWorkspaceMember
+      summary: Remove a student from a group
+      description: Their tasks become unowned. Their edits stay in the document history.
+      x-roles: [lecturer]
+      x-access: Lecturer of its course; the workspace is `open`
+      x-owner: Sonam
+      x-step: '2.1'
+      responses:
+        '204': { description: Removed }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`WORKSPACE_SUBMITTED`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ───────────────────────────── Extensions ─────────────────────────────
+  /groups/{groupId}/extension:
+    parameters:
+      - name: groupId
+        in: path
+        required: true
+        description: The workspace id (the same value as `workspaceId`; the path keeps the Firestore name).
+        schema: { $ref: '#/components/schemas/WorkspaceIdValue' }
+    post:
+      tags: [Extensions]
+      operationId: grantExtension
+      summary: Give one group a new deadline
+      description: |
+        Only while the workspace is still open. Logs who, when and why. Today the route writes
+        `extendedDeadline` on the Firestore group and an `auditLog` document. Once PostgreSQL is in, it also inserts
+        into `group_extensions` and `audit_log` (`deadline.extended`).
+      x-roles: [lecturer]
+      x-access: A lecturer of this workspace
+      x-owner: Kezang
+      x-step: '4.6'
+      x-status: existing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [deadline, reason]
+              properties:
+                deadline: { type: string, format: date-time, description: Must be at least 1 minute in the future }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [groupId, deadline, previous, reason]
+                properties:
+                  groupId: { type: string }
+                  deadline: { type: string, format: date-time }
+                  previous: { type: [string, 'null'], format: date-time }
+                  reason: { type: string }
+        '400':
+          description: '`INVALID_BODY` or `DEADLINE_IN_PAST`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: '`GROUP_NOT_FOUND`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: '`ALREADY_LOCKED`: the deadline job has already submitted and locked it'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ───────────────────────────── Tasks ─────────────────────────────
+  /workspaces/{workspaceId}/tasks:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    get:
+      tags: [Tasks]
+      operationId: listTasks
+      summary: The group's task list
+      x-roles: [student, lecturer]
+      x-access: A member, or a lecturer of its course after submission
+      x-owner: Sonam
+      x-step: '2.8'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tasks]
+                properties:
+                  tasks:
+                    type: array
+                    items: { $ref: '#/components/schemas/Task' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/NotSubmitted' }
+    post:
+      tags: [Tasks]
+      operationId: createTask
+      summary: Add a task
+      x-roles: [student]
+      x-access: A member; the workspace is `open`
+      x-owner: Sonam
+      x-step: '2.8'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+        '400':
+          description: '`INVALID_BODY`, or `NOT_A_MEMBER` when `ownerId` isn''t in the group'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/WorkspaceSubmitted' }
+
+  /tasks/{taskId}:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    patch:
+      tags: [Tasks]
+      operationId: updateTask
+      summary: Edit, assign an owner, link a tab, set a due date, or tick done
+      description: '`done: true` sets `doneAt` to now and `doneBy` to the caller; `done: false` clears both.'
+      x-roles: [student]
+      x-access: A member of the task's workspace; the workspace is `open`
+      x-owner: Sonam
+      x-step: '2.8'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+        '400':
+          description: '`INVALID_BODY` or `NOT_A_MEMBER`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/WorkspaceSubmitted' }
+    delete:
+      tags: [Tasks]
+      operationId: deleteTask
+      summary: Delete a task
+      x-roles: [student]
+      x-access: A member of the task's workspace; the workspace is `open`
+      x-owner: Sonam
+      x-step: '2.8'
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/WorkspaceSubmitted' }
+
+  # ───────────────────────────── Tracking and submissions ─────────────────────────────
+  /workspaces/{workspaceId}/events:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    post:
+      tags: [Submissions]
+      operationId: postTrackingEvents
+      summary: Send a batch of tracking events (time, edit counts, paste events)
+      description: |
+        The batch the browser's tracking queue (`src/collab/trackingQueue.js`) sends, including events queued
+        while offline. Each event is checked with Ajv against `schemas/tracking-event.json` (SO4). Bad events are
+        dropped and counted, never fatal. Events contain counts, lengths and classes only, never typed or pasted text.
+      x-roles: [student]
+      x-access: A member; the workspace is `open`
+      x-owner: Sonam
+      x-step: '2.4'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  items: { $ref: '#/components/schemas/TrackingEvent' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accepted, rejected]
+                properties:
+                  accepted: { type: integer, minimum: 0 }
+                  rejected: { type: integer, minimum: 0 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/WorkspaceSubmitted' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /workspaces/{workspaceId}/submission:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    get:
+      tags: [Submissions]
+      operationId: getSubmission
+      summary: The workspace's submission
+      x-roles: [student, lecturer, collegeAdmin, superAdmin]
+      x-access: A member, or a lecturer of its course, or an admin of its college
+      x-owner: Sonam
+      x-step: '2.4'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Submission' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/NotSubmitted' }
+    post:
+      tags: [Submissions]
+      operationId: submitWorkspace
+      summary: Submit the group's work
+      description: |
+        The backend reads the document and the tracking metrics itself (Firestore, Admin SDK); the browser only
+        sends which file is being submitted. It locks the inputs, sets the workspace to `submitted`, then runs
+        analysis (OpenAI, or the legacy fallback) with a time limit and computes grades.
+
+        **A submission never fails because analysis failed.** If every provider fails, the submission is still
+        `201`, with an `unavailable` analysis result. The deadline job (step 1.6) uses the same service with
+        `trigger = 'deadline'`.
+      x-roles: [student]
+      x-access: A member; the workspace is `open`
+      x-owner: Sonam
+      x-step: '2.4'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [fileId]
+              properties:
+                fileId: { type: string, pattern: '^[A-Za-z0-9_-]{1,128}$', description: 'Firestore `groups/{id}/files/{fileId}`' }
+                tabs:
+                  description: Document tab titles (step 2.3). Dropped if invalid, never fatal.
+                  type: array
+                  maxItems: 50
+                  items: { $ref: '#/components/schemas/DocumentTab' }
+      responses:
+        '201':
+          description: Submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [submission, analysis]
+                properties:
+                  submission: { $ref: '#/components/schemas/Submission' }
+                  analysis: { $ref: '#/components/schemas/AnalysisResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`ALREADY_SUBMITTED` or `ALREADY_LOCKED`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  # ───────────────────────────── Analysis ─────────────────────────────
+  /submissions/{submissionId}/analysis:
+    parameters:
+      - $ref: '#/components/parameters/SubmissionId'
+    get:
+      tags: [Analysis]
+      operationId: getAnalysis
+      summary: The analysis for a submission (latest first)
+      description: '`analysis_results` is append-only, so `history` shows every run. `current` is the newest.'
+      x-roles: [student, lecturer, collegeAdmin, superAdmin]
+      x-access: A member of the workspace, or a lecturer of its course, or an admin of its college
+      x-owner: Sonam
+      x-step: '2.4'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [current, history]
+                properties:
+                  current: { $ref: '#/components/schemas/AnalysisResult' }
+                  history:
+                    type: array
+                    items: { $ref: '#/components/schemas/AnalysisResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Analysis]
+      operationId: rerunAnalysis
+      summary: Run the analysis again (for example after the provider was unavailable)
+      description: Inserts a new `analysis_results` row and recomputes the suggested grades. Overrides are kept. At most 3 runs per submission per hour.
+      x-roles: [lecturer]
+      x-access: Lecturer of its course
+      x-owner: Sonam
+      x-step: '2.4'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                provider:
+                  type: string
+                  enum: [auto, openai, legacy]
+                  default: auto
+                  description: '`auto` follows the `ai_provider` flag and the college''s budget'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalysisResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  # ───────────────────────────── Grades ─────────────────────────────
+  /courses/{courseId}/grades:
+    parameters:
+      - $ref: '#/components/parameters/CourseId'
+    get:
+      tags: [Grades]
+      operationId: listCourseGrades
+      summary: The Grades tab
+      description: A lecturer gets every student's grade for every submitted assignment. A student gets only their own.
+      x-roles: [student, lecturer, collegeAdmin, superAdmin]
+      x-access: Enrolled in the course, or collegeAdmin of its college, or superAdmin
+      x-owner: Sonam
+      x-step: '2.1'
+      parameters:
+        - name: assignmentId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [grades]
+                properties:
+                  grades:
+                    type: array
+                    items: { $ref: '#/components/schemas/Grade' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /courses/{courseId}/grades.csv:
+    parameters:
+      - $ref: '#/components/parameters/CourseId'
+    get:
+      tags: [Grades]
+      operationId: exportGradesCsv
+      summary: Grades as CSV for the VLE
+      description: |
+        UTF-8 with a header row, RFC 4180 quoting, one row per student per assignment. Cells that start with
+        `=`, `+`, `-` or `@` are prefixed with `'` so a spreadsheet won't run them as formulas.
+        Columns: `course_code, assignment, group, student_name, student_email, time, edits, writing, tasks,
+        deductions, suggested, final, overridden_by, override_reason`.
+      x-roles: [lecturer]
+      x-access: Lecturer of the course
+      x-owner: Sonam
+      x-step: '2.8'
+      parameters:
+        - name: assignmentId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          headers:
+            Content-Disposition:
+              schema: { type: string }
+              description: 'attachment; filename="<course_code>-grades.csv"'
+          content:
+            text/csv:
+              schema: { type: string }
+              example: |
+                course_code,assignment,group,student_name,student_email,time,edits,writing,tasks,deductions,suggested,final,overridden_by,override_reason
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /workspaces/{workspaceId}/grades:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    get:
+      tags: [Grades]
+      operationId: listWorkspaceGrades
+      summary: Each member's grade with the reasons
+      description: A student sees only their own row.
+      x-roles: [student, lecturer, collegeAdmin, superAdmin]
+      x-access: A member, or a lecturer of its course after submission, or an admin of its college
+      x-owner: Sonam
+      x-step: '2.8'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [grades]
+                properties:
+                  grades:
+                    type: array
+                    items: { $ref: '#/components/schemas/Grade' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/NotSubmitted' }
+
+  /grades/{gradeId}/overrides:
+    parameters:
+      - $ref: '#/components/parameters/GradeId'
+    get:
+      tags: [Grades]
+      operationId: listOverrides
+      summary: Every change to this grade (who, when, why), newest first
+      x-roles: [student, lecturer, collegeAdmin, superAdmin]
+      x-access: The student the grade belongs to, or a lecturer of its course, or an admin of its college
+      x-owner: Sonam
+      x-step: '2.8'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [overrides]
+                properties:
+                  overrides:
+                    type: array
+                    items: { $ref: '#/components/schemas/Override' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Grades]
+      operationId: overrideGrade
+      summary: Set the final grade (the lecturer's override is final)
+      description: Appends to `overrides` and writes `grade.overridden` to `audit_log`. The suggested grade is unchanged.
+      x-roles: [lecturer]
+      x-access: Lecturer of its course
+      x-owner: Sonam
+      x-step: '2.8'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [grade, reason]
+              properties:
+                grade: { $ref: '#/components/schemas/Score' }
+                reason: { type: string, minLength: 5, maxLength: 1000 }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Override' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────────── Reports ─────────────────────────────
+  /workspaces/{workspaceId}/report.xml:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    get:
+      tags: [Reports]
+      operationId: getWorkspaceReportXml
+      summary: The workspace report as XML
+      description: |
+        Workspace, students, metrics, deductions, grades, AI flags and paste flags. Valid against
+        `backend/reports/report.xsd`, and it links `report.xsl` with an `xml-stylesheet` processing instruction,
+        so a browser shows it as a printable HTML report (red = AI-flagged, yellow = pasted).
+      x-roles: [lecturer, collegeAdmin, superAdmin]
+      x-access: Lecturer of its course, or an admin of its college; after submission
+      x-owner: Sonam
+      x-step: '2.10'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/xml:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/NotSubmitted' }
+
+  # ───────────────────────────── Peer evaluation ─────────────────────────────
+  /workspaces/{workspaceId}/peer-evaluations:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    get:
+      tags: [Peer evaluation]
+      operationId: getPeerEvaluations
+      summary: Peer ratings
+      description: |
+        Behind `peer_eval_enabled`. A student gets the ratings they gave. A lecturer gets each member's average,
+        the number of ratings and the comments, without who wrote them. Not part of the grade.
+      x-roles: [student, lecturer]
+      x-access: A member, or a lecturer of its course; after submission
+      x-flag: peer_eval_enabled
+      x-owner: Sonam
+      x-step: '3.7'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/PeerEvaluationsGiven'
+                  - $ref: '#/components/schemas/PeerEvaluationSummary'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+        '409': { $ref: '#/components/responses/NotSubmitted' }
+    put:
+      tags: [Peer evaluation]
+      operationId: submitPeerEvaluations
+      summary: Rate each teammate 1–5, with an optional comment
+      description: Replaces the caller's earlier ratings for this workspace. Every other member must be rated once, and not the caller.
+      x-roles: [student]
+      x-access: A member; after submission
+      x-flag: peer_eval_enabled
+      x-owner: Sonam
+      x-step: '3.7'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [ratings]
+              properties:
+                ratings:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [rateeId, rating]
+                    properties:
+                      rateeId: { $ref: '#/components/schemas/Uid' }
+                      rating: { type: integer, minimum: 1, maximum: 5 }
+                      comment: { type: string, maxLength: 500 }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PeerEvaluationsGiven' }
+        '400':
+          description: '`INVALID_BODY` (including rating yourself, a non-member, or missing a teammate)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+        '409': { $ref: '#/components/responses/NotSubmitted' }
+
+  # ───────────────────────────── Comparison ─────────────────────────────
+  /courses/{courseId}/comparison:
+    parameters:
+      - $ref: '#/components/parameters/CourseId'
+    get:
+      tags: [Comparison]
+      operationId: getCourseComparison
+      summary: Compare every submitted group in a course
+      description: |
+        Behind `course_dashboard_enabled`. For each submitted group: contribution balance (the Gini coefficient
+        of members' edit counts, 0 = perfectly even), AI likelihood, paste level, and the average and range of
+        final grades.
+      x-roles: [lecturer, collegeAdmin, superAdmin]
+      x-access: Lecturer of the course, or an admin of its college
+      x-flag: course_dashboard_enabled
+      x-owner: Sonam
+      x-step: '4.7'
+      parameters:
+        - name: assignmentId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseComparison' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+
+  # ───────────────────────────── Usage ─────────────────────────────
+  /usage:
+    get:
+      tags: [Usage]
+      operationId: getUsage
+      summary: AI usage and cost for a month
+      description: A collegeAdmin sees their own college (`collegeId` is ignored). A superAdmin can pass any `collegeId`, or leave it out for all colleges.
+      x-roles: [collegeAdmin, superAdmin]
+      x-owner: Tshewang
+      x-step: '3.10'
+      parameters:
+        - name: collegeId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: month
+          in: query
+          description: Calendar month in UTC. Defaults to the current month.
+          schema: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$', examples: ['2026-10'] }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UsageReport' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ───────────────────────────── Data deletion ─────────────────────────────
+  /me/data:
+    delete:
+      tags: [Data deletion]
+      operationId: deleteMyData
+      summary: Delete my account and personal data
+      description: |
+        Follows "Data deletion" in `docs/db-schema.md`. Personal data is removed or anonymised, and history
+        (append-only tables) keeps only an id that no longer links to a person. The Firebase account is deleted
+        last. `confirm` must be the literal `DELETE`.
+      x-roles: [student, lecturer]
+      x-owner: Tshewang
+      x-step: '4.9'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeletionConfirm' }
+      responses:
+        '202':
+          description: Accepted; deletion runs in the background and finishes within 24 hours
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletionAccepted' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/users/{uid}/data:
+    parameters:
+      - $ref: '#/components/parameters/Uid'
+    delete:
+      tags: [Data deletion]
+      operationId: deleteUserData
+      summary: Delete another user's personal data on request
+      description: Same as `DELETE /me/data`. A collegeAdmin can do this only for users in their college. Writes `user.data_deleted` to `audit_log`.
+      x-roles: [collegeAdmin, superAdmin]
+      x-owner: Tshewang
+      x-step: '4.9'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeletionConfirm' }
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletionAccepted' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: '`FORBIDDEN`: wrong role, a user outside the caller''s college, or the caller themselves (use `/me/data`)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: '`USER_NOT_FOUND`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ───────────────────────────── Inline comments ─────────────────────────────
+  /workspaces/{workspaceId}/comments:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    get:
+      tags: [Inline comments]
+      operationId: listInlineComments
+      summary: Lecturer comments anchored to the submitted text
+      description: |
+        Today the browser reads and writes these straight to Firestore `groups/{id}/feedback`, under
+        `firestore.rules` (step 4.6, Kezang). These routes are the backend equivalent with the same shape and limits,
+        for clients that can't use the Firestore SDK (Postman, the XML report). The anchor is `quote`: the exact
+        words plus up to 64 characters before and after (`src/feedback/anchors.js`).
+      x-roles: [student, lecturer]
+      x-access: A member, or a lecturer of its course after submission
+      x-owner: Kezang
+      x-step: '4.6'
+      parameters:
+        - name: fileId
+          in: query
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,128}$' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [comments]
+                properties:
+                  comments:
+                    type: array
+                    items: { $ref: '#/components/schemas/InlineComment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/NotSubmitted' }
+    post:
+      tags: [Inline comments]
+      operationId: createInlineComment
+      summary: Comment on a passage of a submitted file
+      x-roles: [lecturer]
+      x-access: Lecturer of its course; the file was submitted
+      x-owner: Kezang
+      x-step: '4.6'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [fileId, quote, comment]
+              properties:
+                fileId: { type: string, pattern: '^[A-Za-z0-9_-]{1,128}$' }
+                quote: { $ref: '#/components/schemas/Quote' }
+                comment: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InlineComment' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/NotSubmitted' }
+
+  /workspaces/{workspaceId}/comments/{commentId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - name: commentId
+        in: path
+        required: true
+        schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,128}$' }
+    patch:
+      tags: [Inline comments]
+      operationId: updateInlineComment
+      summary: Edit your comment (only its text)
+      x-roles: [lecturer]
+      x-access: The comment's author
+      x-owner: Kezang
+      x-step: '4.6'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [comment]
+              properties:
+                comment: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InlineComment' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Inline comments]
+      operationId: deleteInlineComment
+      summary: Delete your comment
+      x-roles: [lecturer]
+      x-access: The comment's author
+      x-owner: Kezang
+      x-step: '4.6'
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────────── Legacy ─────────────────────────────
+  /check:
+    post:
+      tags: [Legacy]
+      operationId: legacyCheck
+      summary: Old analysis endpoint (replaced by POST /workspaces/{workspaceId}/submission)
+      description: |
+        Kept until the frontend moves to the submission route (step 2.4). It runs Hugging Face + Virtual Writing
+        Tutor and returns a report; the browser writes it to Firestore. Rate limited to 20 requests a minute per IP.
+        Gap: it is not authenticated yet and its 429 body has no `code`; step 1.4 (Tshewang) adds both.
+      deprecated: true
+      x-roles: [student]
+      x-owner: Sonam
+      x-status: existing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: A report built by `services/reportGenerator.js` }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /analyze:
+    post:
+      tags: [Legacy]
+      operationId: legacyAnalyze
+      summary: Old text-only analysis endpoint
+      description: Same status and gaps as `/check`. Removed with it in step 2.4.
+      deprecated: true
+      x-roles: [student]
+      x-owner: Sonam
+      x-status: existing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Analysis result }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID token (JWT)
+      description: '`await auth.currentUser.getIdToken()` in the browser. Verified with `verifyIdToken(token, true)`.'
+
+  parameters:
+    CourseId:
+      name: courseId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AssignmentId:
+      name: assignmentId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AnnouncementId:
+      name: announcementId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    WorkspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/WorkspaceIdValue' }
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SubmissionId:
+      name: submissionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    GradeId:
+      name: gradeId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Uid:
+      name: uid
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Uid' }
+
+  responses:
+    BadRequest:
+      description: '`INVALID_BODY`: the body, a path parameter or a query parameter failed its Zod schema'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            error: The request is not valid.
+            code: INVALID_BODY
+            details: [{ path: title, message: String must contain at least 2 character(s) }]
+    Unauthorized:
+      description: '`NO_TOKEN`, `TOKEN_INVALID`, `TOKEN_EXPIRED` or `TOKEN_REVOKED`'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: Your session has expired. Please sign in again., code: TOKEN_EXPIRED }
+    Forbidden:
+      description: '`NO_ROLE` (no role picked yet) or `FORBIDDEN` (wrong role, or fails `x-access`)'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: You do not have permission to do this., code: FORBIDDEN }
+    NotFound:
+      description: '`NOT_FOUND`: it doesn''t exist, or the caller may not know that it does'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: Not found., code: NOT_FOUND }
+    FeatureDisabledOrNotFound:
+      description: '`FEATURE_DISABLED` (the route''s flag is off) or `NOT_FOUND`'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: This feature is not turned on., code: FEATURE_DISABLED }
+    NotSubmitted:
+      description: '`NOT_SUBMITTED`: lecturers (and peer evaluation) see this only after the workspace is submitted'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: This workspace has not been submitted yet., code: NOT_SUBMITTED }
+    WorkspaceSubmitted:
+      description: '`WORKSPACE_SUBMITTED`: the workspace is submitted or locked, so its inputs can''t change'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: This workspace has been submitted and can no longer be changed., code: WORKSPACE_SUBMITTED }
+    TooManyRequests:
+      description: '`RATE_LIMITED`. Wait `Retry-After` seconds.'
+      headers:
+        Retry-After:
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: Too many requests. Please wait a moment and try again., code: RATE_LIMITED }
+
+  schemas:
+    # ── Shared ──
+    Error:
+      type: object
+      required: [error, code]
+      properties:
+        error: { type: string, description: A message for people. The frontend shows it as is. }
+        code: { $ref: '#/components/schemas/ErrorCode' }
+        details:
+          type: array
+          items:
+            type: object
+            required: [path, message]
+            properties:
+              path: { type: string }
+              message: { type: string }
+    ErrorCode:
+      type: string
+      description: For programs to check. The auth codes come from `docs/auth-contract.md` §4.
+      enum:
+        # auth (Kezang, existing)
+        - NO_TOKEN
+        - TOKEN_INVALID
+        - TOKEN_EXPIRED
+        - TOKEN_REVOKED
+        - NO_ROLE
+        - FORBIDDEN
+        - INVALID_BODY
+        - ROLE_ALREADY_SET
+        - CANNOT_CHANGE_OWN_ROLE
+        - USER_NOT_FOUND
+        - AUTH_UNAVAILABLE
+        # extensions (Kezang, existing)
+        - GROUP_NOT_FOUND
+        - DEADLINE_IN_PAST
+        - ALREADY_LOCKED
+        # added by this contract
+        - NOT_FOUND
+        - CONFLICT
+        - INVALID_JOIN_CODE
+        - JOIN_DISABLED
+        - ALREADY_ENROLLED
+        - NOT_ENROLLED
+        - ALREADY_IN_GROUP
+        - NOT_A_MEMBER
+        - NOT_ENOUGH_STUDENTS
+        - HAS_SUBMISSIONS
+        - WORKSPACE_SUBMITTED
+        - ALREADY_SUBMITTED
+        - NOT_SUBMITTED
+        - FEATURE_DISABLED
+        - RATE_LIMITED
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok] }
+        db: { type: string, enum: [up, down] }
+        version: { type: string }
+    Role:
+      type: string
+      enum: [superAdmin, collegeAdmin, lecturer, student]
+    Uid:
+      type: string
+      minLength: 1
+      maxLength: 128
+      description: A Firebase uid
+    WorkspaceIdValue:
+      type: string
+      pattern: '^[A-Za-z0-9_-]{1,128}$'
+      description: The Firestore `groups/{id}`, also `workspaces.id`
+    Score:
+      type: number
+      minimum: 0
+      maximum: 10
+      multipleOf: 0.01
+    Timestamps:
+      type: object
+      required: [createdAt]
+      properties:
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+    Me:
+      type: object
+      required: [uid, email, role, collegeId]
+      properties:
+        uid: { $ref: '#/components/schemas/Uid' }
+        email: { type: [string, 'null'], format: email }
+        role: { oneOf: [{ $ref: '#/components/schemas/Role' }, { type: 'null' }] }
+        collegeId: { type: [string, 'null'] }
+    UserRef:
+      type: object
+      required: [id, displayName]
+      properties:
+        id: { $ref: '#/components/schemas/Uid' }
+        displayName: { type: string }
+        email: { type: string, format: email, description: Lecturers and admins only }
+
+    # ── Courses ──
+    JoinCode:
+      type: string
+      pattern: '^[A-HJKMNP-Z2-9]{8}$'
+      description: 8 characters with no look-alikes (no 0, O, 1, I or L)
+      examples: [K7QM3XPA]
+    CourseFields:
+      type: object
+      properties:
+        code: { type: string, minLength: 2, maxLength: 20, examples: [CTE412] }
+        title: { type: string, minLength: 2, maxLength: 200 }
+        description: { type: [string, 'null'], maxLength: 5000 }
+        term: { type: [string, 'null'], maxLength: 40, examples: [Autumn 2026] }
+    CourseCreate:
+      allOf:
+        - $ref: '#/components/schemas/CourseFields'
+        - type: object
+          required: [code, title]
+      unevaluatedProperties: false
+    CourseUpdate:
+      allOf:
+        - $ref: '#/components/schemas/CourseFields'
+        - type: object
+          minProperties: 1
+          properties:
+            joinCodeEnabled: { type: boolean }
+            archived: { type: boolean }
+      unevaluatedProperties: false
+    CourseSummary:
+      type: object
+      required: [id, code, title, term, courseRole, archived]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        title: { type: string }
+        term: { type: [string, 'null'] }
+        courseRole:
+          type: [string, 'null']
+          enum: [lecturer, student, null]
+          description: The caller's role in this course; null for admins who aren't enrolled
+        archived: { type: boolean }
+    Course:
+      allOf:
+        - $ref: '#/components/schemas/CourseSummary'
+        - $ref: '#/components/schemas/Timestamps'
+        - type: object
+          required: [description, collegeId, ownerId, joinCodeEnabled, studentCount]
+          properties:
+            description: { type: [string, 'null'] }
+            collegeId: { type: [string, 'null'], format: uuid }
+            ownerId: { $ref: '#/components/schemas/Uid' }
+            joinCode: { $ref: '#/components/schemas/JoinCode' }
+            joinCodeEnabled: { type: boolean }
+            studentCount: { type: integer, minimum: 0 }
+    CourseMember:
+      allOf:
+        - $ref: '#/components/schemas/UserRef'
+        - type: object
+          required: [courseRole, joinedAt]
+          properties:
+            courseRole: { type: string, enum: [lecturer, student] }
+            joinedVia: { type: string, enum: [owner, code, invite] }
+            joinedAt: { type: string, format: date-time }
+
+    # ── Announcements ──
+    AnnouncementCreate:
+      type: object
+      additionalProperties: false
+      required: [title, body]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        body: { type: string, minLength: 1, maxLength: 10000, description: 'Plain text: shown as text, never as HTML' }
+        pinned: { type: boolean, default: false }
+    AnnouncementUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        body: { type: string, minLength: 1, maxLength: 10000 }
+        pinned: { type: boolean }
+    Announcement:
+      allOf:
+        - $ref: '#/components/schemas/Timestamps'
+        - type: object
+          required: [id, courseId, author, title, body, pinned]
+          properties:
+            id: { type: string, format: uuid }
+            courseId: { type: string, format: uuid }
+            author: { $ref: '#/components/schemas/UserRef' }
+            title: { type: string }
+            body: { type: string }
+            pinned: { type: boolean }
+
+    # ── Assignments ──
+    RubricWeights:
+      type: object
+      additionalProperties: false
+      required: [time, edits, writing, tasks]
+      description: Each 0–1 in steps of 0.01. The four must add up to exactly 1.00 (checked by Zod and by a database CHECK).
+      properties:
+        time: { type: number, minimum: 0, maximum: 1, multipleOf: 0.01, default: 0.25 }
+        edits: { type: number, minimum: 0, maximum: 1, multipleOf: 0.01, default: 0.25 }
+        writing: { type: number, minimum: 0, maximum: 1, multipleOf: 0.01, default: 0.25 }
+        tasks: { type: number, minimum: 0, maximum: 1, multipleOf: 0.01, default: 0.25 }
+    AssignmentFields:
+      type: object
+      properties:
+        title: { type: string, minLength: 2, maxLength: 200 }
+        brief: { type: string, minLength: 1, maxLength: 20000 }
+        deadline: { type: string, format: date-time, description: Must be in the future }
+        weights: { $ref: '#/components/schemas/RubricWeights' }
+        timeCapMinutes: { type: [integer, 'null'], minimum: 1, maximum: 10000 }
+        groupSize: { type: [integer, 'null'], minimum: 1, maximum: 20 }
+    AssignmentCreate:
+      allOf:
+        - $ref: '#/components/schemas/AssignmentFields'
+        - type: object
+          required: [title, brief, deadline]
+      unevaluatedProperties: false
+    AssignmentUpdate:
+      allOf:
+        - $ref: '#/components/schemas/AssignmentFields'
+        - type: object
+          minProperties: 1
+      unevaluatedProperties: false
+    Assignment:
+      allOf:
+        - $ref: '#/components/schemas/Timestamps'
+        - type: object
+          required: [id, courseId, title, brief, deadline, weights, timeCapMinutes, groupSize, groupCount, submittedCount]
+          properties:
+            id: { type: string, format: uuid }
+            courseId: { type: string, format: uuid }
+            title: { type: string }
+            brief: { type: string }
+            deadline: { type: string, format: date-time }
+            weights: { $ref: '#/components/schemas/RubricWeights' }
+            timeCapMinutes: { type: [integer, 'null'] }
+            groupSize: { type: [integer, 'null'] }
+            groupCount: { type: integer, minimum: 0 }
+            submittedCount: { type: integer, minimum: 0 }
+            myWorkspaceId:
+              oneOf: [{ $ref: '#/components/schemas/WorkspaceIdValue' }, { type: 'null' }]
+              description: Students only
+            effectiveDeadline:
+              type: string
+              format: date-time
+              description: Students only; includes their group's extension
+
+    # ── Groups ──
+    WorkspaceCreate:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        memberIds:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Uid' }
+    Workspace:
+      allOf:
+        - $ref: '#/components/schemas/Timestamps'
+        - type: object
+          required: [id, assignmentId, courseId, name, status, createdVia, members, deadline, effectiveDeadline]
+          properties:
+            id: { $ref: '#/components/schemas/WorkspaceIdValue' }
+            assignmentId: { type: string, format: uuid }
+            courseId: { type: string, format: uuid }
+            name: { type: string }
+            status: { type: string, enum: [open, submitted, locked] }
+            createdVia: { type: string, enum: [manual, auto] }
+            members:
+              type: array
+              items: { $ref: '#/components/schemas/UserRef' }
+            deadline: { type: string, format: date-time, description: The assignment's deadline }
+            effectiveDeadline: { type: string, format: date-time, description: Includes this group's latest extension }
+            submittedAt: { type: [string, 'null'], format: date-time }
+
+    # ── Tasks ──
+    TaskCreate:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        ownerId: { oneOf: [{ $ref: '#/components/schemas/Uid' }, { type: 'null' }] }
+        tabId: { type: [string, 'null'], minLength: 1, maxLength: 64, description: 'A document tab id (`src/collab/tabs.js`)' }
+        dueAt: { type: [string, 'null'], format: date-time }
+    TaskUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        ownerId: { oneOf: [{ $ref: '#/components/schemas/Uid' }, { type: 'null' }] }
+        tabId: { type: [string, 'null'], minLength: 1, maxLength: 64 }
+        dueAt: { type: [string, 'null'], format: date-time }
+        done: { type: boolean }
+    Task:
+      allOf:
+        - $ref: '#/components/schemas/Timestamps'
+        - type: object
+          required: [id, workspaceId, title, owner, tabId, dueAt, doneAt, doneBy]
+          properties:
+            id: { type: string, format: uuid }
+            workspaceId: { $ref: '#/components/schemas/WorkspaceIdValue' }
+            title: { type: string }
+            owner: { oneOf: [{ $ref: '#/components/schemas/UserRef' }, { type: 'null' }] }
+            tabId: { type: [string, 'null'] }
+            dueAt: { type: [string, 'null'], format: date-time }
+            doneAt: { type: [string, 'null'], format: date-time }
+            doneBy: { oneOf: [{ $ref: '#/components/schemas/Uid' }, { type: 'null' }] }
+
+    # ── Tracking and submissions ──
+    TrackingEvent:
+      type: object
+      additionalProperties: false
+      required: [kind, payload, at]
+      description: |
+        The shape from `src/collab/trackingQueue.js`. `schemas/tracking-event.json` (SO4) is the strict per-kind
+        version that Ajv checks. Payloads hold numbers and classes only, never text.
+      properties:
+        kind: { type: string, enum: [metric, paste, version] }
+        at: { type: integer, description: When it happened on the device (ms since epoch) }
+        payload:
+          type: object
+          description: |
+            metric: `{ timeSpent: seconds, edits: n, tabId? }`
+            paste: `{ length: n, changeType: 'paste-small' | 'paste-large', tabId? }`
+            version: `{ fileId, wordCount }`
+    DocumentTab:
+      type: object
+      additionalProperties: false
+      required: [id, title, depth, wordCount]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 64 }
+        title: { type: string, minLength: 1, maxLength: 100 }
+        depth: { type: integer, minimum: 0, maximum: 2 }
+        wordCount: { type: integer, minimum: 0, maximum: 1000000 }
+    AuthorMetrics:
+      type: object
+      required: [timeSpentSec, edits, pasteEvents, largePastes]
+      properties:
+        timeSpentSec: { type: integer, minimum: 0 }
+        edits: { type: integer, minimum: 0 }
+        pasteEvents: { type: integer, minimum: 0 }
+        largePastes: { type: integer, minimum: 0 }
+        tabEdits:
+          type: object
+          additionalProperties: { type: integer, minimum: 0 }
+          description: Edits per tab id, used by the Tasks score
+    Submission:
+      type: object
+      required: [id, workspaceId, submittedBy, trigger, wordCount, tabs, authorMetrics, submittedAt]
+      properties:
+        id: { type: string, format: uuid }
+        workspaceId: { $ref: '#/components/schemas/WorkspaceIdValue' }
+        submittedBy: { oneOf: [{ $ref: '#/components/schemas/UserRef' }, { type: 'null' }], description: null when the deadline job submitted }
+        trigger: { type: string, enum: [manual, deadline] }
+        wordCount: { type: integer, minimum: 0 }
+        tabs:
+          type: [array, 'null']
+          items: { $ref: '#/components/schemas/DocumentTab' }
+        authorMetrics:
+          type: object
+          description: Keyed by uid. Students see only their own key.
+          additionalProperties: { $ref: '#/components/schemas/AuthorMetrics' }
+        submittedAt: { type: string, format: date-time }
+
+    # ── Analysis ──
+    FlaggedSentence:
+      type: object
+      additionalProperties: false
+      required: [sentence, reason]
+      properties:
+        sentence: { type: string, maxLength: 1000 }
+        reason: { type: string, maxLength: 500 }
+        authorId: { oneOf: [{ $ref: '#/components/schemas/Uid' }, { type: 'null' }], description: 'Who wrote it (from version history), when known' }
+    AnalysisResult:
+      type: object
+      required: [id, submissionId, provider, status, aiLikelihood, flaggedSentences, writingQuality, writingFeedback, difficulty, gradeExplanation, createdAt, notice]
+      description: One row of `analysis_results` (write-once). SO4 validates the provider output with Ajv against `schemas/analysis-result.json` before saving.
+      properties:
+        id: { type: string, format: uuid }
+        submissionId: { type: string, format: uuid }
+        provider: { type: string, enum: [openai, legacy] }
+        model: { type: [string, 'null'] }
+        status: { type: string, enum: [completed, partial, unavailable] }
+        fallbackReason: { type: [string, 'null'], enum: [openai_error, openai_timeout, budget_reached, flag_legacy, null] }
+        aiLikelihood: { type: [integer, 'null'], minimum: 0, maximum: 100 }
+        flaggedSentences:
+          type: array
+          maxItems: 50
+          items: { $ref: '#/components/schemas/FlaggedSentence' }
+        writingQuality: { oneOf: [{ $ref: '#/components/schemas/Score' }, { type: 'null' }] }
+        writingFeedback:
+          type: object
+          properties:
+            strengths: { type: array, items: { type: string } }
+            weaknesses: { type: array, items: { type: string } }
+            summary: { type: string }
+        difficulty: { type: [integer, 'null'], minimum: 1, maximum: 3 }
+        gradeExplanation: { type: [string, 'null'], maxLength: 4000 }
+        notice:
+          type: string
+          const: AI likelihood is a signal, not proof. A lecturer reviews every flag.
+        createdAt: { type: string, format: date-time }
+
+    # ── Grades ──
+    Deduction:
+      type: object
+      required: [kind, points, reason]
+      properties:
+        kind: { type: string, enum: [ai, paste, late, inactivity] }
+        points: { type: number, minimum: 0, maximum: 10 }
+        reason: { type: string }
+    Grade:
+      type: object
+      required: [id, workspaceId, assignmentId, student, scores, weights, deductions, suggested, final, overridden, explanation, computedAt]
+      properties:
+        id: { type: string, format: uuid }
+        workspaceId: { $ref: '#/components/schemas/WorkspaceIdValue' }
+        assignmentId: { type: string, format: uuid }
+        student: { $ref: '#/components/schemas/UserRef' }
+        analysisResultId: { type: [string, 'null'], format: uuid }
+        scores:
+          type: object
+          required: [time, edits, writing, tasks]
+          properties:
+            time: { $ref: '#/components/schemas/Score' }
+            edits: { $ref: '#/components/schemas/Score' }
+            writing: { $ref: '#/components/schemas/Score' }
+            tasks: { $ref: '#/components/schemas/Score' }
+        weights: { $ref: '#/components/schemas/RubricWeights' }
+        deductions:
+          type: array
+          items: { $ref: '#/components/schemas/Deduction' }
+        suggested: { $ref: '#/components/schemas/Score' }
+        final: { $ref: '#/components/schemas/Score' }
+        overridden: { type: boolean }
+        explanation: { type: string, description: '"Why this grade" in plain English' }
+        computedAt: { type: string, format: date-time }
+    Override:
+      type: object
+      required: [id, gradeId, lecturer, previousGrade, newGrade, reason, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        gradeId: { type: string, format: uuid }
+        lecturer: { $ref: '#/components/schemas/UserRef' }
+        previousGrade: { $ref: '#/components/schemas/Score' }
+        newGrade: { $ref: '#/components/schemas/Score' }
+        reason: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    # ── Peer evaluation ──
+    PeerEvaluationsGiven:
+      type: object
+      required: [ratings]
+      description: A student's own ratings
+      properties:
+        ratings:
+          type: array
+          items:
+            type: object
+            required: [rateeId, rating]
+            properties:
+              rateeId: { $ref: '#/components/schemas/Uid' }
+              rating: { type: integer, minimum: 1, maximum: 5 }
+              comment: { type: [string, 'null'] }
+              updatedAt: { type: string, format: date-time }
+    PeerEvaluationSummary:
+      type: object
+      required: [members]
+      description: The lecturer's view. Raters are not named.
+      properties:
+        members:
+          type: array
+          items:
+            type: object
+            required: [student, average, count, expected, comments]
+            properties:
+              student: { $ref: '#/components/schemas/UserRef' }
+              average: { type: [number, 'null'], minimum: 1, maximum: 5 }
+              count: { type: integer, minimum: 0 }
+              expected: { type: integer, minimum: 0, description: Number of teammates who could rate them }
+              comments: { type: array, items: { type: string } }
+
+    # ── Comparison and usage ──
+    CourseComparison:
+      type: object
+      required: [courseId, groups]
+      properties:
+        courseId: { type: string, format: uuid }
+        assignmentId: { type: [string, 'null'], format: uuid }
+        groups:
+          type: array
+          items:
+            type: object
+            required: [workspaceId, name, assignmentId, memberCount, contributionGini, aiLikelihood, pasteLevel, largePastes, averageGrade, minGrade, maxGrade]
+            properties:
+              workspaceId: { $ref: '#/components/schemas/WorkspaceIdValue' }
+              name: { type: string }
+              assignmentId: { type: string, format: uuid }
+              memberCount: { type: integer, minimum: 0 }
+              contributionGini: { type: number, minimum: 0, maximum: 1, description: '0 = edits evenly shared, 1 = one person did everything' }
+              aiLikelihood: { type: [integer, 'null'], minimum: 0, maximum: 100 }
+              pasteLevel: { type: string, enum: [none, low, medium, high] }
+              largePastes: { type: integer, minimum: 0 }
+              averageGrade: { oneOf: [{ $ref: '#/components/schemas/Score' }, { type: 'null' }] }
+              minGrade: { oneOf: [{ $ref: '#/components/schemas/Score' }, { type: 'null' }] }
+              maxGrade: { oneOf: [{ $ref: '#/components/schemas/Score' }, { type: 'null' }] }
+    UsageReport:
+      type: object
+      required: [month, colleges]
+      properties:
+        month: { type: string, examples: ['2026-10'] }
+        colleges:
+          type: array
+          items:
+            type: object
+            required: [collegeId, calls, promptTokens, completionTokens, costUsd, budgetUsd, byProvider]
+            properties:
+              collegeId: { type: [string, 'null'], format: uuid }
+              calls: { type: integer, minimum: 0 }
+              promptTokens: { type: integer, minimum: 0 }
+              completionTokens: { type: integer, minimum: 0 }
+              costUsd: { type: number, minimum: 0 }
+              budgetUsd: { type: [number, 'null'], minimum: 0, description: null when `licensing_enabled` is off or there is no licence }
+              byProvider:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    calls: { type: integer }
+                    failures: { type: integer }
+                    costUsd: { type: number }
+
+    # ── Data deletion ──
+    DeletionConfirm:
+      type: object
+      additionalProperties: false
+      required: [confirm]
+      properties:
+        confirm: { type: string, const: DELETE }
+    DeletionAccepted:
+      type: object
+      required: [status, requestedAt]
+      properties:
+        status: { type: string, const: accepted }
+        requestedAt: { type: string, format: date-time }
+
+    # ── Inline comments ──
+    Quote:
+      type: object
+      additionalProperties: false
+      required: [exact]
+      properties:
+        exact: { type: string, minLength: 1, maxLength: 1000 }
+        prefix: { type: string, maxLength: 64, default: '' }
+        suffix: { type: string, maxLength: 64, default: '' }
+    InlineComment:
+      type: object
+      required: [id, fileId, quote, comment, lecturerId, lecturerName, createdAt]
+      properties:
+        id: { type: string }
+        fileId: { type: string }
+        quote: { $ref: '#/components/schemas/Quote' }
+        comment: { type: string }
+        lecturerId: { $ref: '#/components/schemas/Uid' }
+        lecturerName: { type: string }
+        createdAt: { type: string, format: date-time }
