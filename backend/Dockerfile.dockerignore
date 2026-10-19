@@ -1,0 +1,22 @@
+# Used by backend/Dockerfile (build context: the repo root). Allow-list: only what the API
+# needs at run time goes into the image.
+*
+!backend/package.json
+!backend/package-lock.json
+!backend/server.js
+!backend/app.js
+!backend/config/
+!backend/db/
+!backend/routes/
+!backend/services/
+!backend/src/
+!src/utils/difficultyDetection.js
+
+# Never: tests, fixtures, secrets
+**/*.test.js
+**/*.itest.js
+**/testFakes.js
+**/fakeFirestore.js
+**/.env*
+**/*serviceAccount*.json
+**/*.json.key
