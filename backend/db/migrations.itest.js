@@ -86,11 +86,19 @@ describe('migrations', () => {
   });
 
   test('each migration can be undone one at a time', async () => {
+    const reasonCheck = async () =>
+      (await client.query(`SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'analysis_results_fallback_reason_check'`)).rows[0].def;
+    const trigger = async () => (await client.query(`SELECT 1 FROM pg_trigger WHERE tgname = 'analysis_results_immutable'`)).rows.length;
+
+    assert.match(await reasonCheck(), /openai_not_configured/);
     await migrate('down', 1);
-    const { rows } = await client.query(`SELECT 1 FROM pg_trigger WHERE tgname = 'analysis_results_immutable'`);
-    assert.equal(rows.length, 0, 'the trigger migration is undone first');
+    assert.doesNotMatch(await reasonCheck(), /openai_not_configured/, 'the fallback-reasons migration is undone first');
+    assert.equal(await trigger(), 1);
+    await migrate('down', 1);
+    assert.equal(await trigger(), 0, 'then the trigger migration');
     assert.deepEqual(await tables(), TABLES, 'the tables are still there');
     await migrate('up');
+    assert.match(await reasonCheck(), /openai_not_configured/);
   });
 });
 
