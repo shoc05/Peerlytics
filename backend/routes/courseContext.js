@@ -6,11 +6,12 @@ import { getAdmin } from '../src/auth/firebaseAdmin.js';
 import { createUserRateLimit, requireDb } from './http.js';
 import { ensureUser } from '../services/courses/access.js';
 import { createGroupMirror } from '../services/courses/groupMirror.js';
+import { getFlag as defaultGetFlag } from '../src/flags/index.js';
 
 export const ANY_ROLE = ['student', 'lecturer', 'collegeAdmin', 'superAdmin'];
 
 /**
- * @param {{ db, getClients?, mirror?, now?, random?, joinLimit? }} deps
+ * @param {{ db, getClients?, mirror?, now?, random?, joinLimit?, getFlag? }} deps
  *   getClients returns { auth, db } (firebase-admin) or null; tests pass fakes.
  */
 export function createCourseContext({
@@ -20,6 +21,7 @@ export function createCourseContext({
   now = Date.now,
   random = randomBytes,
   joinLimit = createUserRateLimit({ max: 10, windowMs: 60_000 }),
+  getFlag = defaultGetFlag,
 }) {
   const requireAuth = createRequireAuth(() => getClients()?.auth ?? null);
 
@@ -41,6 +43,7 @@ export function createCourseContext({
     now,
     random,
     joinLimit,
+    getFlag,
     /** requireAuth, then the role check, then a database and the caller's users row. */
     guard: (...roles) => [requireAuth, requireRole(...roles), requireDb(db), syncUser],
   };

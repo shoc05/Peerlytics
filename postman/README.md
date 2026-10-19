@@ -30,7 +30,9 @@ Refusals are covered too: 401, 403, 404 and 409.
 2. Set `baseUrl`, and fill `token_*` and `uid_*` with ID tokens and uids of real test accounts with the right roles. The `firestoreEmulator` variable stays empty against a real server; the two "Emulator only" requests are then skipped.
 3. Run the collection with the Collection Runner.
 
-The **Not built yet** folder lists routes that are in the contract but not built yet (steps 3.7, 3.10, 4.6, 4.7, 4.9). Each of them expects 404. When a route is built, its request fails, which is the reminder to move it into its folder and give it real checks.
+The **Peer evaluation** requests need the `peer_eval_enabled` flag on (CI turns it on with `FLAG_PEER_EVAL_ENABLED=true`).
+
+The **Not built yet** folder lists routes that are in the contract but not built yet (steps 3.10, 4.6, 4.7, 4.9). Each of them expects 404. When a route is built, its request fails, which is the reminder to move it into its folder and give it real checks.
 
 ## OAuth practical: Google ID token
 

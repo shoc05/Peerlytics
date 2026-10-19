@@ -12,6 +12,7 @@ import { createCourseRouter } from './routes/courses.js';
 import { createSubmissionRouter } from './routes/submissions.js';
 import { createGradeRouter } from './routes/grades.js';
 import { createReportRouter } from './routes/reports.js';
+import { createPeerEvaluationRouter } from './routes/peerEvaluations.js';
 import { createTaskRouter } from './routes/tasks.js';
 import { createAnalysisService } from './services/analysis/analysisService.js';
 import { createLegacyProvider } from './services/analysis/legacyProvider.js';
@@ -75,6 +76,7 @@ export function createApp({ config, db, metrics = createMetrics(), courseDeps = 
   app.use('/api', createTaskRouter(courses));
   app.use('/api', createGradeRouter(courses));
   app.use('/api', createReportRouter(courses));
+  app.use('/api', createPeerEvaluationRouter(courses));
   app.use(
     '/api',
     createSubmissionRouter(courses, {

@@ -2572,6 +2572,296 @@
       ]
     },
     {
+      "name": "Peer evaluation",
+      "item": [
+        {
+          "name": "Rate your teammate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('PUT /workspaces/{{workspaceId}}/peer-evaluations -> 200', function () { pm.response.to.have.status(200); });",
+                  "let json = {}; try { json = pm.response.json(); } catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_student1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ratings\": [\n    {\n      \"rateeId\": \"{{uid_student2}}\",\n      \"rating\": 4,\n      \"comment\": \"Found the best sources.\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/workspaces/{{workspaceId}}/peer-evaluations",
+            "description": "PUT /api/workspaces/{{workspaceId}}/peer-evaluations"
+          }
+        },
+        {
+          "name": "Rating yourself: 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('PUT /workspaces/{{workspaceId}}/peer-evaluations -> 400', function () { pm.response.to.have.status(400); });",
+                  "let json = {}; try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('code INVALID_BODY', function () { pm.expect(json.code).to.eql('INVALID_BODY'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_student2}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ratings\": [\n    {\n      \"rateeId\": \"{{uid_student2}}\",\n      \"rating\": 5\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/workspaces/{{workspaceId}}/peer-evaluations",
+            "description": "PUT /api/workspaces/{{workspaceId}}/peer-evaluations"
+          }
+        },
+        {
+          "name": "Ratings I gave",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('GET /workspaces/{{workspaceId}}/peer-evaluations -> 200', function () { pm.response.to.have.status(200); });",
+                  "let json = {}; try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('Ratings I gave', function () {",
+                  "  pm.expect(json.ratings.length).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_student1}}"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": "{{baseUrl}}/api/workspaces/{{workspaceId}}/peer-evaluations",
+            "description": "GET /api/workspaces/{{workspaceId}}/peer-evaluations"
+          }
+        },
+        {
+          "name": "Lecturer sees averages, not raters",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('GET /workspaces/{{workspaceId}}/peer-evaluations -> 200', function () { pm.response.to.have.status(200); });",
+                  "let json = {}; try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('Lecturer sees averages, not raters', function () {",
+                  "  pm.expect(JSON.stringify(json)).to.not.include('rater');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_lecturer}}"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": "{{baseUrl}}/api/workspaces/{{workspaceId}}/peer-evaluations",
+            "description": "GET /api/workspaces/{{workspaceId}}/peer-evaluations"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Random groups",
+      "item": [
+        {
+          "name": "An assignment to group",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('POST /courses/{{courseId}}/assignments -> 201', function () { pm.response.to.have.status(201); });",
+                  "let json = {}; try { json = pm.response.json(); } catch (e) {}",
+                  "if (pm.response.code === 201) pm.collectionVariables.set('autoAssignmentId', json.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_lecturer}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Pair work\",\n  \"brief\": \"x\",\n  \"deadline\": \"{{deadline}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/courses/{{courseId}}/assignments",
+            "description": "POST /api/courses/{{courseId}}/assignments"
+          }
+        },
+        {
+          "name": "Shuffle students into groups",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('POST /assignments/{{autoAssignmentId}}/groups/auto -> 201', function () { pm.response.to.have.status(201); });",
+                  "let json = {}; try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('Shuffle students into groups', function () {",
+                  "  pm.expect(json.groups.reduce((n, g) => n + g.members.length, 0)).to.eql(3);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_lecturer}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"size\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/assignments/{{autoAssignmentId}}/groups/auto",
+            "description": "POST /api/assignments/{{autoAssignmentId}}/groups/auto"
+          }
+        },
+        {
+          "name": "Nobody left: 409 NOT_ENOUGH_STUDENTS",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('POST /assignments/{{autoAssignmentId}}/groups/auto -> 409', function () { pm.response.to.have.status(409); });",
+                  "let json = {}; try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('code NOT_ENOUGH_STUDENTS', function () { pm.expect(json.code).to.eql('NOT_ENOUGH_STUDENTS'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_lecturer}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"size\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/assignments/{{autoAssignmentId}}/groups/auto",
+            "description": "POST /api/assignments/{{autoAssignmentId}}/groups/auto"
+          }
+        }
+      ]
+    },
+    {
       "name": "Reports",
       "item": [
         {
@@ -2714,119 +3004,6 @@
     {
       "name": "Not built yet",
       "item": [
-        {
-          "name": "Random groups (3.7) (404 until built)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('POST /assignments/{{assignmentId}}/groups/auto -> 404', function () { pm.response.to.have.status(404); });",
-                  "let json = {}; try { json = pm.response.json(); } catch (e) {}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token_lecturer}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "auth": {
-              "type": "noauth"
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"size\": 2\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": "{{baseUrl}}/api/assignments/{{assignmentId}}/groups/auto",
-            "description": "POST /api/assignments/{{assignmentId}}/groups/auto"
-          }
-        },
-        {
-          "name": "Peer ratings (3.7) (404 until built)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('GET /workspaces/{{workspaceId}}/peer-evaluations -> 404', function () { pm.response.to.have.status(404); });",
-                  "let json = {}; try { json = pm.response.json(); } catch (e) {}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token_student1}}"
-              }
-            ],
-            "auth": {
-              "type": "noauth"
-            },
-            "url": "{{baseUrl}}/api/workspaces/{{workspaceId}}/peer-evaluations",
-            "description": "GET /api/workspaces/{{workspaceId}}/peer-evaluations"
-          }
-        },
-        {
-          "name": "Rate teammates (3.7) (404 until built)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('PUT /workspaces/{{workspaceId}}/peer-evaluations -> 404', function () { pm.response.to.have.status(404); });",
-                  "let json = {}; try { json = pm.response.json(); } catch (e) {}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token_student1}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "auth": {
-              "type": "noauth"
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"ratings\": [\n    {\n      \"rateeId\": \"{{uid_student2}}\",\n      \"rating\": 4\n    }\n  ]\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": "{{baseUrl}}/api/workspaces/{{workspaceId}}/peer-evaluations",
-            "description": "PUT /api/workspaces/{{workspaceId}}/peer-evaluations"
-          }
-        },
         {
           "name": "Course comparison (4.7) (404 until built)",
           "event": [
@@ -3285,6 +3462,10 @@
     }
   ],
   "variable": [
+    {
+      "key": "autoAssignmentId",
+      "value": ""
+    },
     {
       "key": "courseId",
       "value": ""

@@ -1,6 +1,7 @@
 // Assignments (brief, deadline, rubric weights), group workspaces and their members (step 2.1).
 // Shapes, roles and errors follow backend/openapi.yaml. Every change to a workspace's name,
 // members or deadline is copied to its Firestore groups/{id} document in the same transaction.
+import { randomInt } from 'node:crypto';
 import express from 'express';
 import { fail, handler, isUniqueViolation, parse, withTransaction } from './http.js';
 import { ANY_ROLE } from './courseContext.js';
@@ -15,8 +16,10 @@ import {
   workspaceId as workspaceIdSchema,
   workspaceRename,
 } from './courseSchemas.js';
+import { z } from 'zod';
 import { assignmentAccess, courseAccess, isStaff, mustBeActive, mustBeOpen, mustTeach, workspaceAccess } from '../services/courses/access.js';
 import { newWorkspaceId } from '../services/courses/groupMirror.js';
+import { makeGroups } from '../services/courses/autoGroups.js';
 import * as map from '../services/courses/mappers.js';
 
 function idParam(schema, value) {
@@ -80,6 +83,8 @@ async function loadWorkspaces(q, where, params, { withEmail }) {
 }
 
 const loadWorkspace = async (q, id, opts) => (await loadWorkspaces(q, 'w.id = $1', [id], opts))[0];
+
+const autoGroupsBody = z.object({ size: z.number().int().min(2).max(20) }).strict();
 
 /** 400 NOT_ENROLLED unless every uid is a student in the course. */
 async function mustBeStudents(q, courseId, uids) {
@@ -283,6 +288,89 @@ export function createAssignmentRouter(ctx) {
         throw membershipConflict(err);
       }
       res.status(201).json(await loadWorkspace(db.pool, id, { withEmail: true }));
+    })
+  );
+
+  router.post(
+    '/assignments/:assignmentId/groups/auto',
+    guard('lecturer'),
+    handler(async (req, res) => {
+      const access = await assignmentAccess(db.pool, req.user, idParam(uuid, req.params.assignmentId));
+      mustTeach(access);
+      mustBeActive(access.course);
+      const { size } = parse(autoGroupsBody, req.body);
+      const assignmentId = access.assignment.id;
+
+      const created = await withTransaction(db.pool, async (q) => {
+        // Lock the assignment so two runs at once can't place the same student twice.
+        await q.query('SELECT 1 FROM assignments WHERE id = $1 FOR UPDATE', [assignmentId]);
+        const { rows: ungrouped } = await q.query(
+          `SELECT e.user_id FROM enrolments e
+            WHERE e.course_id = $1 AND e.course_role = 'student'
+              AND NOT EXISTS (SELECT 1 FROM workspace_members m WHERE m.assignment_id = $2 AND m.user_id = e.user_id)
+            ORDER BY e.user_id`,
+          [access.course.id, assignmentId]
+        );
+        if (ungrouped.length < size) {
+          throw fail(409, 'NOT_ENOUGH_STUDENTS', `Only ${ungrouped.length} student(s) have no group, fewer than the group size of ${size}.`);
+        }
+        const groups = makeGroups(ungrouped.map((r) => r.user_id), size, randomInt);
+
+        // Names continue after the existing groups: "Group N".
+        const { rows: names } = await q.query('SELECT name FROM workspaces WHERE assignment_id = $1', [assignmentId]);
+        const taken = new Set(names.map((n) => n.name));
+        let n = 0;
+        const nextName = () => {
+          do n += 1;
+          while (taken.has(`Group ${n}`));
+          return `Group ${n}`;
+        };
+
+        const { rows: lecturers } = await q.query(
+          `SELECT user_id FROM enrolments WHERE course_id = $1 AND course_role = 'lecturer' ORDER BY user_id`,
+          [access.course.id]
+        );
+        const made = [];
+        for (const memberIds of groups) {
+          const id = newWorkspaceId(random);
+          const name = nextName();
+          await q.query(`INSERT INTO workspaces (id, assignment_id, name, created_via, created_by) VALUES ($1, $2, $3, 'auto', $4)`, [
+            id,
+            assignmentId,
+            name,
+            req.user.uid,
+          ]);
+          for (const uid of memberIds) {
+            await q.query('INSERT INTO workspace_members (workspace_id, user_id, assignment_id) VALUES ($1, $2, $3)', [id, uid, assignmentId]);
+          }
+          await mirror.create({
+            id,
+            name,
+            deadline: map.iso(access.assignment.deadline),
+            memberIds,
+            lecturerIds: lecturers.map((l) => l.user_id),
+            courseId: access.course.id,
+            assignmentId,
+          });
+          made.push({ id, name, memberIds });
+        }
+        await q.query(
+          `INSERT INTO audit_log (actor_id, action, target_type, target_id, details) VALUES ($1, 'groups.auto_created', 'assignment', $2, $3)`,
+          [req.user.uid, assignmentId, JSON.stringify({ size, groups: made.map((g) => ({ id: g.id, members: g.memberIds.length })) })]
+        );
+        return made;
+      });
+
+      // Tell each student their group. Best effort: the groups exist whether or not this works.
+      for (const g of created) {
+        for (const uid of g.memberIds) {
+          await mirror
+            .notify(uid, { type: 'group-assigned', message: `You are in ${g.name} for "${access.assignment.title}".`, groupId: g.id })
+            .catch((err) => console.warn('[groups/auto] notification failed:', err.message));
+        }
+      }
+      const groups = await loadWorkspaces(db.pool, 'w.id = ANY($1)', [created.map((g) => g.id)], { withEmail: true });
+      res.status(201).json({ groups });
     })
   );
 
