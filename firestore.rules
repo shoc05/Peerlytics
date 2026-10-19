@@ -53,23 +53,9 @@
       }
 
       // Fields only the backend (Admin SDK) may write on a group.
-      function serverOnlyGroupFields() {
-        return ['locked', 'lockedAt', 'lockedBy', 'lockedDeadline', 'autoSubmit', 'extendedDeadline', 'extension'];
-      }
-
       function touchesServerOnlyGroupFields() {
-        return request.resource.data.diff(resource.data).affectedKeys().hasAny(serverOnlyGroupFields());
-      }
-
-      // submittedToLecturers is how a student hands the workspace to a lecturer. Only student
-      // members change it, and only by adding: a lecturer can't unlock a workspace for
-      // themselves, and a student can't take back work after submitting it.
-      function submittedToLecturersChangeAllowed() {
-        let was = resource.data.get('submittedToLecturers', []);
-        let now = request.resource.data.get('submittedToLecturers', []);
-        return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['submittedToLecturers']) || (
-          request.auth.uid in resource.data.memberIds && !isLecturer() && now.hasAll(was)
-        );
+        return request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['locked', 'lockedAt', 'lockedBy', 'lockedDeadline', 'autoSubmit', 'extendedDeadline']);
       }
 
       function isLecturerOfGroup(groupId) {
@@ -149,19 +135,19 @@
           request.auth.uid in resource.data.lecturerIds ||
           isAdmin()
         );
-        // The creator must be in the group, nothing starts submitted, and the lock fields are
-        // the server's.
-        allow create: if signedIn() &&
-          (request.auth.uid in request.resource.data.memberIds ||
-            request.auth.uid in request.resource.data.lecturerIds) &&
-          request.resource.data.get('submittedToLecturers', []).size() == 0 &&
-          !request.resource.data.keys().hasAny(serverOnlyGroupFields());
-        // Only members update a group. Members may add lecturers (invites, "submit to a
-        // lecturer"), but see submittedToLecturersChangeAllowed for the unlock itself.
-        allow update: if signedIn() &&
-          (request.auth.uid in resource.data.memberIds || request.auth.uid in resource.data.lecturerIds) &&
-          !touchesServerOnlyGroupFields() &&
-          submittedToLecturersChangeAllowed();
+        allow create: if signedIn();
+        // Members may update freely. Additionally, any signed-in user (a lecturer who
+        // received a submission to their email) may add THEMSELVES to lecturerIds and/or
+        // submittedToLecturers — this is how a targeted lecturer becomes a group member
+        // so their reads of reports/analytics pass. They can only add their own uid.
+        allow update: if signedIn() && !touchesServerOnlyGroupFields() && (
+          isMemberOfGroup(groupId) ||
+          (
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['lecturerIds', 'submittedToLecturers']) &&
+            request.auth.uid in request.resource.data.lecturerIds
+          )
+        );
         // Use resource.data directly to avoid a circular get() on the same doc being deleted.
         // Any member may delete the workspace until it is locked at the deadline.
         allow delete: if signedIn() &&
@@ -170,7 +156,7 @@
 
         match /folders/{folderId} {
           allow read: if canReadWorkspaceContent(groupId);
-          allow create, update, delete: if isStudentMemberOfGroup(groupId) && !groupLocked(groupId);
+          allow create, update, delete: if isMemberOfGroup(groupId) && !isLecturer() && !groupLocked(groupId);
         }
 
         match /files/{fileId} {
