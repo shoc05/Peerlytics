@@ -1,0 +1,4 @@
+# The real server address lives only on the machine that runs Ansible.
+inventory.ini
+# Downloaded by ansible-galaxy (requirements.yml).
+collections/

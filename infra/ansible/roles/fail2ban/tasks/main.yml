@@ -1,0 +1,24 @@
+---
+# Bans an address after repeated failed SSH logins (keys only, but it keeps the logs quiet and
+# slows scanners down).
+- name: Configure the SSH jail
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.d/peerlytics.local
+    content: |
+      # Managed by Ansible (infra/ansible/roles/fail2ban).
+      [sshd]
+      enabled = true
+      backend = systemd
+      maxretry = {{ fail2ban_maxretry }}
+      findtime = {{ fail2ban_findtime }}
+      bantime = {{ fail2ban_bantime }}
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart fail2ban
+
+- name: Start fail2ban now and at boot
+  ansible.builtin.service:
+    name: fail2ban
+    state: started
+    enabled: true

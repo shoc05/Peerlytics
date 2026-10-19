@@ -1,0 +1,59 @@
+---
+# k3s (single node) at a pinned version, with its bundled Traefik ingress (used in step 4.1).
+- name: Check which k3s version is installed
+  ansible.builtin.command:
+    cmd: /usr/local/bin/k3s --version
+  register: k3s_installed
+  changed_when: false
+  failed_when: false
+
+- name: Download the k3s installer
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: /usr/local/bin/k3s-install.sh
+    owner: root
+    group: root
+    mode: "0755"
+  when: k3s_version not in (k3s_installed.stdout | default(''))
+
+- name: Install k3s {{ k3s_version }}
+  ansible.builtin.command:
+    cmd: /usr/local/bin/k3s-install.sh
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_EXEC: "server --write-kubeconfig-mode 0600"
+  changed_when: true
+  when: k3s_version not in (k3s_installed.stdout | default(''))
+
+- name: Wait until the cluster answers
+  ansible.builtin.command:
+    cmd: /usr/local/bin/k3s kubectl get --raw /readyz
+  register: k3s_ready
+  retries: 30
+  delay: 5
+  until: k3s_ready.rc == 0
+  changed_when: false
+
+- name: Create the deploy user's .kube folder
+  ansible.builtin.file:
+    path: "/home/{{ deploy_user }}/.kube"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0700"
+
+- name: Give the deploy user a kubeconfig
+  ansible.builtin.copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "/home/{{ deploy_user }}/.kube/config"
+    remote_src: true
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0600"
+
+- name: Create the staging, production and monitoring namespaces
+  ansible.builtin.command:
+    cmd: /usr/local/bin/k3s kubectl apply -f -
+    stdin: "{{ lookup('ansible.builtin.template', 'namespaces.yaml.j2') }}"
+  register: k3s_namespaces_result
+  changed_when: "' created' in k3s_namespaces_result.stdout or ' configured' in k3s_namespaces_result.stdout"

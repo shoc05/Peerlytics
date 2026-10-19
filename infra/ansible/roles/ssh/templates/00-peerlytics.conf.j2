@@ -1,0 +1,14 @@
+# Managed by Ansible (infra/ansible/roles/ssh). Edits here are overwritten.
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+PubkeyAuthentication yes
+PermitEmptyPasswords no
+AuthenticationMethods publickey
+AllowUsers {{ deploy_user }}
+X11Forwarding no
+MaxAuthTries 3
+LoginGraceTime 30
+ClientAliveInterval 300
+ClientAliveCountMax 2
