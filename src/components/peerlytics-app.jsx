@@ -14,8 +14,10 @@ const StoragePanel = lazy(() => import('./StoragePanel'));
 const CalendarPanel = lazy(() => import('./CalendarPanel'));
 const ReportsPanel = lazy(() => import('./ReportsPanel'));
 const AdminPanel = lazy(() => import('./AdminPanel'));
+const CoursesPanel = lazy(() => import('../courses/CoursesPanel'));
 import { enrichMembers } from '../utils/scoring';
 import { gradeSubmission, writingFromReport } from '../utils/behaviorGrade';
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 import {
   inviteLecturerByEmail,
   createProjectGroup,
@@ -48,6 +50,10 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { logOut } from '../firebase/authService';
 import { createActivityEntry, formatRelativeTime, formatDuration, formatDate, formatDateTime } from '../utils/workspaceHelpers';
+import { effectiveDeadline, isExtended } from '../deadlines/effectiveDeadline';
+import ExtensionForm from '../deadlines/ExtensionForm';
+import { courseApi } from '../api';
+import { isCourseApiReady } from '../courses/courseApi';
 
 // ─── Sidebar nav icons (small inline SVGs, currentColor) ───
 const Svg = (props) => (
@@ -64,6 +70,9 @@ const NavIconStorage = (p) => (
 );
 const NavIconCalendar = (p) => (
   <Svg {...p}><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></Svg>
+);
+const NavIconCourses = (p) => (
+  <Svg {...p}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></Svg>
 );
 const NavIconFiles = (p) => (
   <Svg {...p}><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6" /></Svg>
@@ -525,7 +534,7 @@ const PeerlyticsDashboard = () => {
   }, [isLecturer, activeGroupId, workspaceSubmissions.length, workspaceReports.length]);
 
   const profileWorkspaces = useMemo(
-    () => availableGroups.map((g) => ({ id: g.id, name: g.name, deadline: g.deadline })),
+    () => availableGroups.map((g) => ({ id: g.id, name: g.name, deadline: effectiveDeadline(g) })),
     [availableGroups]
   );
 
@@ -579,6 +588,8 @@ const PeerlyticsDashboard = () => {
       offline: 'Offline Mode',
       sync: 'Sync Changes',
       projects: 'Projects',
+      courses: 'Courses',
+      notAvailableYet: 'Not available yet',
       analytics: 'Analytics',
       analysis: 'Analysis',
       storage: 'Submitted Work',
@@ -609,6 +620,8 @@ const PeerlyticsDashboard = () => {
       offline: 'འབྲེལ་མེད།',
       sync: 'མཐུན་སྒྲིགས།',
       projects: 'ལས་འགུལ།',
+      courses: 'སློབ་ཚན།',
+      notAvailableYet: 'ད་ལྟོ་ཚུན་ མིན་འདུག',
       analytics: 'དབྱེ་ཞིབ།',
       analysis: 'དབྱེ་ཞིབ།',
       storage: 'བཙུགས་པའི་ལཱ།',
@@ -1176,7 +1189,7 @@ const PeerlyticsDashboard = () => {
                 fontFamily: '"Times New Roman", Times, serif', fontSize: 15, lineHeight: 1.8,
               }}>
                 {fileViewer.html
-                  ? <div dangerouslySetInnerHTML={{ __html: fileViewer.html }} />
+                  ? <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(fileViewer.html) }} />
                   : fileViewer.text
                     ? <div style={{ whiteSpace: 'pre-wrap' }}>{fileViewer.text}</div>
                     : <div style={{ color: '#888', textAlign: 'center', padding: 40 }}>No file content was captured with this submission.</div>}
@@ -1195,6 +1208,8 @@ const PeerlyticsDashboard = () => {
           {/* Main nav — spec: Projects · Analytics · Storage · Calendar */}
           {[
             { id: 'projects', label: t('projects'), icon: NavIconProjects },
+            // Courses (step 1.7) stays visible but marked until the course API exists.
+            { id: 'courses', label: t('courses'), icon: NavIconCourses, note: isCourseApiReady(courseApi) ? null : t('notAvailableYet') },
             // Analytics is not in the main nav: students don't get it at all, and for
             // lecturers it lives in "Analytics Tools" as "Analysis".
             { id: 'storage', label: t('storage'), icon: NavIconStorage },
@@ -1222,7 +1237,16 @@ const PeerlyticsDashboard = () => {
                 }`}
               >
                 <Icon className="w-4 h-4 flex-shrink-0 transition-transform group-hover:scale-110" />
-                <span>{item.label}</span>
+                {item.note ? (
+                  <span className="min-w-0 leading-tight">
+                    <span className="block">{item.label}</span>
+                    <span className={`block text-[10px] font-semibold ${
+                      isActive ? 'text-white/90' : darkMode ? 'text-amber-200' : 'text-amber-800'
+                    }`}>{item.note}</span>
+                  </span>
+                ) : (
+                  <span>{item.label}</span>
+                )}
                 {unread > 0 && (
                   <span className="ml-auto bg-rose-500 text-white rounded-full text-[10px] px-2 py-0.5 font-bold ring-2 ring-rose-500/30 animate-pulse">
                     {unread}
@@ -1532,7 +1556,7 @@ const PeerlyticsDashboard = () => {
                 darkMode={darkMode}
                 currentSubmissionReport={displayReports[0] || workspaceReports[0] || null}
                 workspaceCreatedAt={groupMeta?.createdDate || (groupMeta?.createdAt?.seconds ? groupMeta.createdAt.seconds * 1000 : null)}
-                deadline={groupMeta?.deadline || null}
+                deadline={effectiveDeadline(groupMeta)}
               />
               {false && (<>
               <div style={{
@@ -1788,7 +1812,9 @@ const PeerlyticsDashboard = () => {
                       onClick={() => {
                         setFileViewer({
                           name: effectiveLecturerSubmission.fileName || effectiveLecturerSubmission.folderName || 'Submission',
-                          html: lecturerDocContent.html,
+                          // Sanitised up front so HTML that is empty once cleaned falls back
+                          // to the text or the "no content" message instead of a blank page.
+                          html: sanitizeHtml(lecturerDocContent.html),
                           text: lecturerDocContent.text,
                         });
                       }}
@@ -2183,7 +2209,7 @@ const PeerlyticsDashboard = () => {
                 groupMembers={groupMembers}
                 pushToast={pushToast}
                 pushActivity={pushActivity}
-                deadline={groupMeta?.deadline || null}
+                deadline={effectiveDeadline(groupMeta)}
                 locked={groupMeta?.locked === true}
                 createdDate={groupMeta?.createdDate || null}
                 submissions={submissionReports}
@@ -2295,7 +2321,7 @@ const PeerlyticsDashboard = () => {
                         </div>
                         <div style={{ fontSize: 15, fontWeight: 700, color: darkMode ? '#ededed' : '#1a1a1a', marginBottom: 4 }}>{ws.name}</div>
                         <div style={{ fontSize: 12, color: darkMode ? '#9a9a9a' : '#777', lineHeight: 1.5 }}>
-                          {ws.memberIds?.length || 0} members · {ws.deadline ? `Due ${formatDate(ws.deadline)}` : 'No deadline'}
+                          {ws.memberIds?.length || 0} members · {effectiveDeadline(ws) ? `Due ${formatDate(effectiveDeadline(ws))}${isExtended(ws) ? ' (extended)' : ''}` : 'No deadline'}
                         </div>
                       </div>
                     );
@@ -2355,6 +2381,17 @@ const PeerlyticsDashboard = () => {
                   pushToast(err.message || 'Could not delete submission');
                 }
               }}
+              pushToast={pushToast}
+            />
+          )}
+
+          {/* COURSES (step 1.7) */}
+          {activeTab === 'courses' && (
+            <CoursesPanel
+              api={courseApi}
+              language={language}
+              darkMode={darkMode}
+              isLecturer={isLecturer}
               pushToast={pushToast}
             />
           )}
@@ -2443,9 +2480,12 @@ const PeerlyticsDashboard = () => {
                             <div>
                               <div style={{ fontWeight: '700', fontSize: 15, color: darkMode ? '#ededed' : '#1a1a1a' }}>{group.name}</div>
                               <div style={{ fontSize: 12, color: darkMode ? '#9a9a9a' : '#666', marginTop: 6 }}>
-                                {group.memberIds?.length || 0} members • Due {group.deadline ? formatDate(group.deadline) : 'Not set'}
+                                {group.memberIds?.length || 0} members • Due {effectiveDeadline(group) ? formatDate(effectiveDeadline(group)) : 'Not set'}{isExtended(group) ? ' (extended)' : ''}
                               </div>
                             </div>
+                            {isLecturer && (group.lecturerIds || []).includes(currentUser?.uid) && (
+                              <ExtensionForm group={group} darkMode={darkMode} onDone={() => pushToast('Deadline extended')} />
+                            )}
                             {isLecturer && (
                               <button
                                 type="button"

@@ -1,0 +1,64 @@
+{
+  "parameters": {
+    "ai_provider": {
+      "defaultValue": { "value": "legacy" },
+      "valueType": "STRING",
+      "description": "Analysis provider: openai, or legacy (Hugging Face + Virtual Writing Tutor)."
+    },
+    "ai_detection_enabled": {
+      "defaultValue": { "value": "true" },
+      "valueType": "BOOLEAN",
+      "description": "Run AI-likelihood detection on submissions. Off: reports say AI detection was not run."
+    },
+    "yjs_enabled": {
+      "defaultValue": { "value": "false" },
+      "valueType": "BOOLEAN",
+      "description": "Live co-editing through the collab server (Yjs + Hocuspocus). Off: the old Firestore sync."
+    },
+    "doc_tabs_enabled": {
+      "defaultValue": { "value": "false" },
+      "valueType": "BOOLEAN",
+      "description": "Google Docs-style tabs and sub-tabs inside a document. Needs yjs_enabled."
+    },
+    "offline_enabled": {
+      "defaultValue": { "value": "false" },
+      "valueType": "BOOLEAN",
+      "description": "Keep editing without internet (y-indexeddb); changes merge on reconnect. Needs yjs_enabled."
+    },
+    "push_enabled": {
+      "defaultValue": { "value": "false" },
+      "valueType": "BOOLEAN",
+      "description": "Browser push notifications (FCM)."
+    },
+    "csv_invite_enabled": {
+      "defaultValue": { "value": "false" },
+      "valueType": "BOOLEAN",
+      "description": "Lecturers invite students by uploading a CSV."
+    },
+    "docx_export_enabled": {
+      "defaultValue": { "value": "false" },
+      "valueType": "BOOLEAN",
+      "description": "Export documents as .docx."
+    },
+    "licensing_enabled": {
+      "defaultValue": { "value": "false" },
+      "valueType": "BOOLEAN",
+      "description": "College licences and usage limits."
+    },
+    "peer_eval_enabled": {
+      "defaultValue": { "value": "false" },
+      "valueType": "BOOLEAN",
+      "description": "Peer evaluation between group members."
+    },
+    "course_dashboard_enabled": {
+      "defaultValue": { "value": "false" },
+      "valueType": "BOOLEAN",
+      "description": "Lecturer course dashboard and course comparison."
+    },
+    "dzongkha_enabled": {
+      "defaultValue": { "value": "false" },
+      "valueType": "BOOLEAN",
+      "description": "Dzongkha interface language."
+    }
+  }
+}

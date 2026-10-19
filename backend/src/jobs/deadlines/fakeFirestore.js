@@ -46,7 +46,8 @@ export function fakeFirestore(seed = {}) {
     path.startsWith(`${col}/`) && !path.slice(col.length + 1).includes('/');
 
   const collectionRef = (col, filters = []) => ({
-    doc: (id) => docRef(`${col}/${id}`),
+    // doc() with no id gets a fresh one, like the Admin SDK.
+    doc: (id) => docRef(`${col}/${id ?? `auto${(autoId += 1)}`}`),
     async add(data) {
       autoId += 1;
       const ref = docRef(`${col}/auto${autoId}`);

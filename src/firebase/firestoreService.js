@@ -319,7 +319,8 @@ export async function bumpMemberActivity(groupId, uid) {
   );
 }
 
-export async function savePasteEvent(groupId, { fileId, userId, userName, changeType, pasteRanges, contentSnippet }) {
+// `timestamp` is when the paste happened; events queued offline (src/collab) pass their own.
+export async function savePasteEvent(groupId, { fileId, userId, userName, changeType, pasteRanges, contentSnippet, timestamp = Date.now() }) {
   await addDoc(collection(db(), 'groups', groupId, 'pasteEvents'), {
     fileId,
     userId,
@@ -329,7 +330,7 @@ export async function savePasteEvent(groupId, { fileId, userId, userName, change
     // Keep enough of the pasted text to highlight the WHOLE block (was 500 → only part
     // of long pastes was stored/highlighted). 20k chars is well within Firestore limits.
     contentSnippet: (contentSnippet || '').slice(0, 20000),
-    timestamp: Date.now(),
+    timestamp,
     createdAt: serverTimestamp(),
   });
 }
@@ -504,7 +505,7 @@ export async function persistOpenFile(groupId, userId, file, { html = '', text =
     contentHtml: html ?? file.contentHtml ?? '',
     lastEditedAt: Date.now(),
   };
-  await saveWorkspaceFile(groupId, payload);
+  // Body first: once the file is marked submitted, firestore.rules makes both read-only.
   if (file.type === 'document' || html || text) {
     await saveDocumentContent({
       fileId: file.id,
@@ -514,6 +515,7 @@ export async function persistOpenFile(groupId, userId, file, { html = '', text =
       text: text || '',
     });
   }
+  await saveWorkspaceFile(groupId, payload);
   return payload;
 }
 
@@ -756,6 +758,18 @@ export async function saveGradeOverride(groupId, memberId, grade, opts = {}) {
     lecturerName,
     updatedAt: serverTimestamp(),
   });
+  // The append-only override log (firestore.rules: groups/{groupId}/overrides).
+  if (isOverride) {
+    await addDoc(collection(db(), 'groups', groupId, 'overrides'), {
+      memberId: String(memberId),
+      grade,
+      suggestedGrade,
+      reason: String(reason || ''),
+      lecturerId,
+      lecturerName,
+      createdAt: serverTimestamp(),
+    });
+  }
 }
 
 export async function clearGradeOverride(groupId, memberId) {
@@ -808,6 +822,34 @@ export async function getAllGradeDecisions(groupIds = []) {
     } catch { /* skip groups we can't read */ }
   }
   return out;
+}
+
+// ——— Inline feedback (step 4.6) ———
+
+// A lecturer's comment anchored to submitted text: quote = { exact, prefix, suffix }
+// (src/feedback/anchors.js). firestore.rules allow it only on a submitted file.
+export async function addInlineFeedback(groupId, { fileId, quote, comment, lecturerId, lecturerName }) {
+  await addDoc(collection(db(), 'groups', groupId, 'feedback'), {
+    fileId,
+    quote: { exact: quote.exact, prefix: quote.prefix || '', suffix: quote.suffix || '' },
+    comment,
+    lecturerId,
+    lecturerName: lecturerName || '',
+    createdAt: serverTimestamp(),
+  });
+}
+
+export function subscribeInlineFeedback(groupId, fileId, callback) {
+  const q = query(collection(db(), 'groups', groupId, 'feedback'), where('fileId', '==', fileId));
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (err) => logger.error('[subscribeInlineFeedback]', err.code, err.message)
+  );
+}
+
+export async function deleteInlineFeedback(groupId, feedbackId) {
+  await deleteDoc(doc(db(), 'groups', groupId, 'feedback', feedbackId));
 }
 
 // ——— Notifications ———

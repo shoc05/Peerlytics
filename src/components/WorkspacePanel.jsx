@@ -24,6 +24,9 @@ import {
   deleteWorkspaceFolder,
   saveDocumentContent,
   getDocumentContent,
+  addInlineFeedback,
+  subscribeInlineFeedback,
+  deleteInlineFeedback,
   saveDocumentVersion,
   subscribeFileVersions,
   subscribePasteEvents,
@@ -46,6 +49,10 @@ import { classifyPasteDelta, buildPasteRanges } from '../utils/pasteDetection';
 import { detectContentDifficulty } from '../utils/difficultyDetection';
 import { gradeSubmission, writingFromReport } from '../utils/behaviorGrade';
 import { logger } from '../utils/logger';
+import { useFlag } from '../flags/FlagsProvider';
+import { liveCollab, useCollab } from '../collab/useCollab';
+import { useDocumentTabs } from '../collab/useDocumentTabs';
+import { useTrackingQueue } from '../collab/useTrackingQueue';
 
 const PASTE_MSG = 'Large content pasted in short time';
 
@@ -242,6 +249,59 @@ export default function WorkspacePanel({
   const isStudent = !readOnly;
   const editingLocked = readOnly || locked;
 
+  // Live editing (step 2.2): student members on an open document, when yjs_enabled is on.
+  // Anything else, or a collab server that can't be reached, keeps the old Firestore sync.
+  const yjsEnabled = useFlag('yjs_enabled');
+  // Offline editing (step 3.2): a copy on the device, and tracking events queued while offline.
+  const offlineEnabled = useFlag('offline_enabled');
+  const collabState = useCollab({
+    enabled: yjsEnabled && openFile?.type === 'document' && !editingLocked && !openFile?.submitted,
+    offline: offlineEnabled,
+    groupId,
+    fileId: openFile?.id,
+    user: currentUser,
+    loadSeedHtml: async () => (await getDocumentContent(openFile.id))?.html || openFile.contentHtml || '',
+  });
+  const collab = liveCollab(collabState);
+  // Document tabs (step 2.3): the data and actions for the tabs panel (N5).
+  const documentTabs = useDocumentTabs(collab, { enabled: useFlag('doc_tabs_enabled') });
+  // Inline feedback (step 4.6): lecturer comments on a submitted document; the group reads them.
+  const [inlineFeedback, setInlineFeedback] = useState([]);
+  useEffect(() => {
+    if (!groupId || !openFile?.id || !openFile.submitted) {
+      setInlineFeedback([]);
+      return undefined;
+    }
+    return subscribeInlineFeedback(groupId, openFile.id, setInlineFeedback);
+  }, [groupId, openFile?.id, openFile?.submitted]);
+  const feedback = openFile?.submitted
+    ? {
+        items: inlineFeedback,
+        canComment: readOnly,
+        currentUid: currentUser?.uid,
+        onAdd: (quote, comment) =>
+          addInlineFeedback(groupId, {
+            fileId: openFile.id,
+            quote,
+            comment,
+            lecturerId: currentUser.uid,
+            lecturerName: userName,
+          }),
+        onDelete: (id) => deleteInlineFeedback(groupId, id).catch(() => pushToast?.('Could not delete the comment')),
+      }
+    : null;
+
+  const tracking = useTrackingQueue({
+    enabled: offlineEnabled,
+    uid: currentUser?.uid,
+    isOnline: () => !collab || collab.online !== false,
+    senders: {
+      metric: ({ groupId: gid, ...counts }) => incrementMemberMetric(gid, currentUser.uid, counts),
+      version: ({ groupId: gid, fileId, entry }) => saveDocumentVersion(gid, fileId, entry),
+      paste: ({ groupId: gid, ...event }, at) => savePasteEvent(gid, { ...event, timestamp: at }),
+    },
+  });
+
   // Esc closes the submit modal (Enter-to-submit is handled on the email field, which
   // also enforces the required-email validation).
   useEffect(() => {
@@ -336,7 +396,7 @@ export default function WorkspacePanel({
       const wholeToFlush = Math.floor(totalMin) - flushedMin;
       if (wholeToFlush >= 1 && groupId && currentUser?.uid) {
         flushedMin += wholeToFlush;
-        incrementMemberMetric(groupId, currentUser.uid, { timeSpent: wholeToFlush }).catch(() => {});
+        tracking.track('metric', { groupId, timeSpent: wholeToFlush }).catch(() => {});
         bumpMemberActivity(groupId, currentUser.uid).catch(() => {});
       }
     }, TICK_MS);
@@ -347,11 +407,11 @@ export default function WorkspacePanel({
         // Flush the leftover active fraction below the last whole minute already written.
         const remainder = activeMsRef.current / 60000 - flushedMin;
         if (remainder > 0) {
-          incrementMemberMetric(groupId, currentUser.uid, { timeSpent: remainder }).catch(() => {});
+          tracking.track('metric', { groupId, timeSpent: remainder }).catch(() => {});
         }
       }
     };
-  }, [openFile?.id, readOnly, groupId, currentUser?.uid]);
+  }, [openFile?.id, readOnly, groupId, currentUser?.uid, tracking]);
 
   useEffect(() => {
     if (!groupId || !openFile?.id) return undefined;
@@ -553,9 +613,9 @@ export default function WorkspacePanel({
       const type = changeType.startsWith('paste') ? 'paste' : changeType === 'import' ? 'edit' : 'edit';
       const entry = { ...createVersionEntry(userName, summary, opts), type };
       setVersionHistory((vh) => ({ ...vh, [fileId]: [entry, ...(vh[fileId] || [])].slice(0, 25) }));
-      if (groupId) saveDocumentVersion(groupId, fileId, entry).catch(() => {});
+      if (groupId) tracking.track('version', { groupId, fileId, entry }).catch(() => {});
     },
-    [userName, groupId]
+    [userName, groupId, tracking]
   );
 
   const triggerPaste = useCallback(
@@ -577,7 +637,8 @@ export default function WorkspacePanel({
           pastedText: snippet,
         });
         if (groupId && currentUser?.uid) {
-          savePasteEvent(groupId, {
+          tracking.track('paste', {
+            groupId,
             fileId: openFile.id,
             userId: currentUser.uid,
             userName,
@@ -589,7 +650,7 @@ export default function WorkspacePanel({
       }
       setTimeout(() => setPasteAlert(false), 6000);
     },
-    [userName, pushActivity, openFile, saveVersion, groupId, currentUser?.uid]
+    [userName, pushActivity, openFile, saveVersion, groupId, currentUser?.uid, tracking]
   );
 
   const openFileHandler = (file) => {
@@ -651,9 +712,11 @@ export default function WorkspacePanel({
 
   const autosaveTimerRef = useRef(null);
 
-  const handleEditorChange = useCallback(({ html, text }) => {
+  const handleEditorChange = useCallback(({ html, text, remote = false }) => {
     setEditorHtml(html);
     setEditorContent(text);
+    // Another member's live edit: their own client records and saves it.
+    if (remote) return;
     if (openFile?.id) {
       setLastEditedMeta((m) => ({ ...m, [openFile.id]: { user: userName, timestamp: Date.now() } }));
     }
@@ -707,6 +770,7 @@ export default function WorkspacePanel({
     const filePasteEvents = pasteEvents.filter((p) => p.fileId === openFile.id);
     const analytics = await getAnalyticsSnapshot(wsId).catch(() => []);
 
+    const tabs = isDocument ? editorRef.current?.getTabs?.() ?? null : null;
     const { report } = await submitForCheck({
       text,
       html,
@@ -718,7 +782,10 @@ export default function WorkspacePanel({
       difficulty,
       versions,
       pasteEvents: filePasteEvents,
+      ...(tabs ? { tabs } : {}),
     });
+    // Keep tab titles on the report even when the analysis service was unavailable.
+    if (tabs && !report.tabs) report.tabs = tabs;
 
     const { report: saved } = await saveFullSubmission({
       report,
@@ -948,17 +1015,6 @@ export default function WorkspacePanel({
     }
   };
 
-  const simulatePaste = () => {
-    if (readOnly) return;
-    const prev = editorContent;
-    const block =
-      '\n\n[Pasted block: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae.]\n\n';
-    const next = prev + block;
-    const pasteRanges = [{ start: prev.length, end: next.length }];
-    setEditorContent(next);
-    triggerPaste(pasteRanges, next, 'paste-large', block.trim());
-  };
-
   const onBlurSave = () => {
     if (!openFile || readOnly) return;
     const prev = contentBeforeEditRef.current;
@@ -1012,7 +1068,7 @@ export default function WorkspacePanel({
         html: htmlSnap || '',
         text: editorContent,
       }).catch(() => {});
-      incrementMemberMetric(groupId, currentUser.uid, { edits: 1 }).catch(() => {});
+      tracking.track('metric', { groupId, edits: 1 }).catch(() => {});
     }
   };
 
@@ -1606,6 +1662,11 @@ export default function WorkspacePanel({
             >
               {isDoc ? (
                 <WorkspaceEditor
+                  key={collab ? `live-${openFile.id}-${documentTabs.activeField}` : 'classic'}
+                  collab={collab}
+                  tabField={documentTabs.activeField}
+                  tabsEnabled={documentTabs.enabled}
+                  feedback={feedback}
                   ref={editorRef}
                   storageKey={`peerlytics-doc-${openFile.id}`}
                   initialHtml={editorHtml}
@@ -1625,7 +1686,7 @@ export default function WorkspacePanel({
                     // metric reflects actual writing — not only blur-saves, which often
                     // never fire before submit (left every student at 0 edits → same grade).
                     if (!readOnly && groupId && currentUser?.uid) {
-                      incrementMemberMetric(groupId, currentUser.uid, { edits: 1 }).catch(() => {});
+                      tracking.track('metric', { groupId, edits: 1 }).catch(() => {});
                     }
                     // Record a TYPED version once a MEANINGFUL chunk of new text has built up
                     // (≈40+ new chars, roughly a sentence) rather than on every micro-pause —
