@@ -1,0 +1,75 @@
+# Nightly pg_dump at 02:00 Bhutan time to a separate disk, keeping 14 days. The custom format
+# (-Fc) is what pg_restore and the restore drill (infra/scripts/restore-drill.sh, step 5.2) read.
+# The dump is written to a temporary name and renamed when complete, so a half-written file is
+# never mistaken for a backup.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: peerlytics-backups
+  labels:
+    app.kubernetes.io/name: peerlytics-postgres-backup
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: { storage: 10Gi }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: peerlytics-postgres-backup
+  labels:
+    app.kubernetes.io/name: peerlytics-postgres-backup
+spec:
+  schedule: "0 2 * * *"
+  timeZone: Asia/Thimphu
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: peerlytics-postgres-backup
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 70
+            runAsGroup: 70
+            fsGroup: 70
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: pg-dump
+              image: postgres:16-alpine
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  name="peerlytics-$(date -u +%Y%m%dT%H%M%SZ).dump"
+                  pg_dump -h peerlytics-postgres -U peerlytics -d peerlytics -Fc -f "/backups/.partial-$name"
+                  mv "/backups/.partial-$name" "/backups/$name"
+                  find /backups -name 'peerlytics-*.dump' -mtime +13 -delete
+                  find /backups -name '.partial-*' -mmin +120 -delete
+                  echo "backup written: $name ($(du -h "/backups/$name" | cut -f1))"
+              env:
+                - name: PGPASSWORD
+                  valueFrom: { secretKeyRef: { name: peerlytics-postgres, key: POSTGRES_PASSWORD } }
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { cpu: 500m, memory: 512Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              volumeMounts:
+                - { name: backups, mountPath: /backups }
+                - { name: tmp, mountPath: /tmp }
+          volumes:
+            - name: backups
+              persistentVolumeClaim: { claimName: peerlytics-backups }
+            - name: tmp
+              emptyDir: {}

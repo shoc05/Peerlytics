@@ -2862,6 +2862,73 @@
       ]
     },
     {
+      "name": "Comparison",
+      "item": [
+        {
+          "name": "Compare the groups in a course",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('GET /courses/{{courseId}}/comparison -> 200', function () { pm.response.to.have.status(200); });",
+                  "let json = {}; try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('Compare the groups in a course', function () {",
+                  "  pm.expect(json.groups.length).to.be.above(0);",
+                  "  pm.expect(json.groups[0].contributionGini).to.be.within(0, 1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_lecturer}}"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": "{{baseUrl}}/api/courses/{{courseId}}/comparison",
+            "description": "GET /api/courses/{{courseId}}/comparison"
+          }
+        },
+        {
+          "name": "Students cannot see it: 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('GET /courses/{{courseId}}/comparison -> 403', function () { pm.response.to.have.status(403); });",
+                  "let json = {}; try { json = pm.response.json(); } catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_student1}}"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": "{{baseUrl}}/api/courses/{{courseId}}/comparison",
+            "description": "GET /api/courses/{{courseId}}/comparison"
+          }
+        }
+      ]
+    },
+    {
       "name": "Reports",
       "item": [
         {
@@ -3004,35 +3071,6 @@
     {
       "name": "Not built yet",
       "item": [
-        {
-          "name": "Course comparison (4.7) (404 until built)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('GET /courses/{{courseId}}/comparison -> 404', function () { pm.response.to.have.status(404); });",
-                  "let json = {}; try { json = pm.response.json(); } catch (e) {}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token_lecturer}}"
-              }
-            ],
-            "auth": {
-              "type": "noauth"
-            },
-            "url": "{{baseUrl}}/api/courses/{{courseId}}/comparison",
-            "description": "GET /api/courses/{{courseId}}/comparison"
-          }
-        },
         {
           "name": "Usage (3.10) (404 until built)",
           "event": [

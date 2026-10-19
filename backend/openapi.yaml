@@ -1543,9 +1543,12 @@ paths:
       operationId: getCourseComparison
       summary: Compare every submitted group in a course
       description: |
-        Behind `course_dashboard_enabled`. For each submitted group: contribution balance (the Gini coefficient
-        of members' edit counts, 0 = perfectly even), AI likelihood, paste level, and the average and range of
-        final grades.
+        Behind `course_dashboard_enabled`. For each submitted group:
+        - contribution balance: the Gini coefficient of the members' edit counts, normalised by n(n-1) so that
+          0 = edits evenly shared and 1 = one member did everything (a group of one is 0);
+        - AI likelihood from the latest analysis;
+        - paste level from large pastes per member: none 0, low up to 0.5, medium up to 1.5, high above;
+        - the average, lowest and highest final grade (the lecturer's override when there is one).
       x-roles: [lecturer, collegeAdmin, superAdmin]
       x-access: Lecturer of the course, or an admin of its college
       x-flag: course_dashboard_enabled

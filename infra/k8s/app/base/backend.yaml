@@ -1,0 +1,119 @@
+# The API. One replica on purpose: the deadline lock, the reminder emails and the rate limits
+# run inside the process, so a second replica would run them twice. Scale out only after those
+# move to a single scheduler (the notifier, step 2.5).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: peerlytics-backend
+  labels:
+    app.kubernetes.io/name: peerlytics-backend
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: peerlytics-backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: peerlytics-backend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000 # "node" in node:22-alpine
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      initContainers:
+        # Database migrations before the API starts. node-pg-migrate takes an advisory lock, so
+        # two pods starting at once can't run them twice. Called without npm (read-only disk).
+        - name: migrate
+          image: ghcr.io/shoc05/peerlytics-backend
+          workingDir: /app/backend
+          command: [node, node_modules/node-pg-migrate/bin/node-pg-migrate.js, up, --migrations-dir, db/migrations, --migrations-table, pgmigrations]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: peerlytics-postgres, key: POSTGRES_PASSWORD } }
+            # The password must be URL-safe (letters and digits): see the README.
+            - name: DATABASE_URL
+              value: postgres://peerlytics:$(POSTGRES_PASSWORD)@peerlytics-postgres:5432/peerlytics
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      containers:
+        - name: backend
+          image: ghcr.io/shoc05/peerlytics-backend
+          ports:
+            - { name: http, containerPort: 5000 }
+          envFrom:
+            - configMapRef: { name: peerlytics-config }
+          env:
+            - name: PORT
+              value: "5000"
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: peerlytics-postgres, key: POSTGRES_PASSWORD } }
+            - name: DATABASE_URL
+              value: postgres://peerlytics:$(POSTGRES_PASSWORD)@peerlytics-postgres:5432/peerlytics
+            # Optional: the API runs without them, with the matching features off.
+            - name: OPENAI_API_KEY
+              valueFrom: { secretKeyRef: { name: peerlytics-providers, key: OPENAI_API_KEY, optional: true } }
+            - name: HF_API_KEY
+              valueFrom: { secretKeyRef: { name: peerlytics-providers, key: HF_API_KEY, optional: true } }
+            - name: VWT_API_KEY
+              valueFrom: { secretKeyRef: { name: peerlytics-providers, key: VWT_API_KEY, optional: true } }
+            - name: SMTP_USER
+              valueFrom: { secretKeyRef: { name: peerlytics-smtp, key: SMTP_USER, optional: true } }
+            - name: SMTP_PASS
+              valueFrom: { secretKeyRef: { name: peerlytics-smtp, key: SMTP_PASS, optional: true } }
+            - name: METRICS_TOKEN
+              valueFrom: { secretKeyRef: { name: peerlytics-metrics, key: METRICS_TOKEN, optional: true } }
+          startupProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits: { cpu: "1", memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: firebase, mountPath: /var/run/secrets/peerlytics/firebase, readOnly: true }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
+        - name: firebase
+          secret:
+            secretName: peerlytics-firebase
+            optional: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: peerlytics-backend
+  labels:
+    app.kubernetes.io/name: peerlytics-backend
+spec:
+  selector:
+    app.kubernetes.io/name: peerlytics-backend
+  ports:
+    - { name: http, port: 5000, targetPort: http }
