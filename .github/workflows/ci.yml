@@ -177,6 +177,8 @@ jobs:
           done
           kubeconform_files="infra/k8s/traefik/helmchartconfig.yaml"
           "$RUNNER_TEMP/kubeconform" -strict -summary -ignore-missing-schemas $kubeconform_files
+      - name: Shell scripts (shellcheck)
+        run: shellcheck -S warning infra/scripts/*.sh postman/ci/*.sh
 
   collab:
     # Step 2.2 live-editing server. Not yet a required check; add it to scripts/setup-github.sh to make it one.
