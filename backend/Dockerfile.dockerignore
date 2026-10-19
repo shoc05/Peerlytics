@@ -7,6 +7,7 @@
 !backend/app.js
 !backend/config/
 !backend/db/
+!backend/grading/
 !backend/routes/
 !backend/schemas/
 !backend/services/

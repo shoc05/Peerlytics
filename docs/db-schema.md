@@ -294,11 +294,11 @@ The suggested grade for each student in a workspace, worked out on the server by
 | analysis_result_id | uuid | NULL, FK analysis_results ON DELETE RESTRICT | The analysis it was computed from. NULL if analysis was unavailable |
 | time_score | numeric(4,2) | NOT NULL | 0–10 |
 | edits_score | numeric(4,2) | NOT NULL | 0–10 |
-| writing_score | numeric(4,2) | NOT NULL | 0–10 |
-| tasks_score | numeric(4,2) | NOT NULL | 0–10 |
+| writing_score | numeric(4,2) | NULL | 0–10. NULL when no analysis was available; its weight is then shared among the other scores (migration `1792368000003`) |
+| tasks_score | numeric(4,2) | NULL | 0–10. NULL when the group made no tasks; same rule |
 | weights | jsonb | NOT NULL | The assignment's `{ time, edits, writing, tasks }` when it was computed, so later rubric edits don't silently change a grade |
-| deductions | jsonb | NOT NULL, '[]' | `[{ kind: 'ai'|'paste'|'late'|'inactivity', points, reason }]`. Applies only to this student |
-| suggested | numeric(4,2) | NOT NULL | Weighted sum minus deductions, clamped to 0–10 |
+| deductions | jsonb | NOT NULL, '[]' | `[{ kind: 'ai'|'paste', points, reason }]`. Applies only to this student |
+| suggested | numeric(4,2) | NOT NULL | Weighted sum minus deductions, clamped to 0–10. Worked out by `backend/grading/` |
 | explanation | text | NOT NULL | "Why this grade" in plain English |
 | computed_at | timestamptz | NOT NULL, now() | |
 
