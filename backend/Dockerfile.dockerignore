@@ -17,6 +17,7 @@
 **/*.itest.js
 **/testFakes.js
 **/fakeFirestore.js
+**/testDatabase.js
 **/.env*
 **/*serviceAccount*.json
 **/*.json.key

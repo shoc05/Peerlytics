@@ -20,6 +20,10 @@ info:
       know about gives `404 NOT_FOUND`, so ids can't be probed.
     - `x-owner` and `x-step` show who builds the route and in which step. `x-status: existing` means the route is
       already on `develop` and this file only documents it.
+    - A path id that is malformed (not a uuid, or not a valid workspace id) is `404 NOT_FOUND`, the same as an unknown id.
+    - Archived courses are read-only: every change except unarchiving is `403 COURSE_ARCHIVED`.
+    - `503` with `AUTH_UNAVAILABLE`, `DB_UNAVAILABLE` or `FIRESTORE_UNAVAILABLE` means the server is missing the Firebase
+      Admin SDK, PostgreSQL or Firestore configuration. It is not listed on each route.
     - Errors are `{ "error": "<for people>", "code": "<for programs>", "details"?: [{ path, message }] }`.
       `details` lists Zod issues and never echoes the submitted values.
     - Lecturers see a workspace's content, analysis and grades only after it is submitted
@@ -322,6 +326,7 @@ paths:
       tags: [Courses]
       operationId: updateCourse
       summary: Edit a course, turn joining on or off, archive it
+      description: 'An archived course accepts only `{ "archived": false }` (with or without other fields); anything else is `403 COURSE_ARCHIVED`.'
       x-roles: [lecturer]
       x-access: Lecturer of this course
       x-owner: Sonam
@@ -375,7 +380,7 @@ paths:
       tags: [Enrolment]
       operationId: listCourseMembers
       summary: The Members tab
-      description: Students see names and course roles only. Lecturers and admins also see emails and each student's group per assignment.
+      description: Students see names, course roles and join dates. Lecturers and admins also see emails and how each member joined.
       x-roles: [student, lecturer, collegeAdmin, superAdmin]
       x-access: Enrolled in the course, or collegeAdmin of its college, or superAdmin
       x-owner: Sonam
@@ -448,7 +453,7 @@ paths:
       summary: Post an announcement
       description: Enrolled students get an in-app notification (notifier, step 2.5).
       x-roles: [lecturer]
-      x-access: Lecturer of this course; the course is not archived
+      x-access: Lecturer of this course; the course is not archived (`403 COURSE_ARCHIVED`)
       x-owner: Sonam
       x-step: '2.1'
       requestBody:
@@ -541,7 +546,7 @@ paths:
       summary: Create an assignment with a brief, deadline and rubric weights
       description: Weights left out default to 0.25 each. If any are given, all four must be given and add up to 1.00.
       x-roles: [lecturer]
-      x-access: Lecturer of this course; the course is not archived
+      x-access: Lecturer of this course; the course is not archived (`403 COURSE_ARCHIVED`)
       x-owner: Sonam
       x-step: '2.1'
       requestBody:
@@ -1940,6 +1945,10 @@ components:
         - NOT_SUBMITTED
         - FEATURE_DISABLED
         - RATE_LIMITED
+        - COURSE_ARCHIVED
+        # 503: the server is missing configuration
+        - DB_UNAVAILABLE
+        - FIRESTORE_UNAVAILABLE
     Health:
       type: object
       required: [status]
@@ -2047,7 +2056,7 @@ components:
           required: [courseRole, joinedAt]
           properties:
             courseRole: { type: string, enum: [lecturer, student] }
-            joinedVia: { type: string, enum: [owner, code, invite] }
+            joinedVia: { type: string, enum: [owner, code, invite], description: Lecturers and admins only }
             joinedAt: { type: string, format: date-time }
 
     # ── Announcements ──

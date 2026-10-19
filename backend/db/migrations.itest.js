@@ -1,19 +1,15 @@
 // Integration tests against a real PostgreSQL (npm run test:db). They need TEST_DATABASE_URL
-// (or DATABASE_URL) pointing at a server where the user may CREATE DATABASE, for example the
-// docker compose postgres:
+// (or DATABASE_URL), from the environment or the repo-root .env, pointing at a server where
+// the user may CREATE DATABASE, for example the docker compose postgres:
 //   TEST_DATABASE_URL=postgres://peerlytics:<password>@127.0.0.1:5432/postgres npm run test:db
 // Each run creates its own throwaway database and drops it afterwards, so a development
 // database is never touched. Rows inserted here are test fixtures, not app data.
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { after, before, describe, test } from 'node:test';
 import pg from 'pg';
 import { runner } from 'node-pg-migrate';
+import { createEmptyDatabase, MIGRATIONS_DIR as dir } from './testDatabase.js';
 
-const adminUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
-const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations');
 const migrationsTable = 'pgmigrations';
 
 // Every table in docs/db-schema.md.
@@ -23,8 +19,8 @@ const TABLES = [
   'submissions', 'tasks', 'usage', 'users', 'workspace_members', 'workspaces',
 ];
 
-const dbName = `peerlytics_itest_${randomBytes(4).toString('hex')}`;
 let dbUrl;
+let dropDb;
 let client;
 
 function migrate(direction, count = Infinity) {
@@ -56,25 +52,14 @@ const CHECK_VIOLATION = '23514';
 const FK_VIOLATION = '23503';
 
 before(async () => {
-  assert.ok(adminUrl, 'Set TEST_DATABASE_URL (or DATABASE_URL) to run the database tests.');
-  const admin = new pg.Client({ connectionString: adminUrl });
-  await admin.connect();
-  await admin.query(`CREATE DATABASE ${dbName}`);
-  await admin.end();
-  const url = new URL(adminUrl);
-  url.pathname = `/${dbName}`;
-  dbUrl = url.toString();
+  ({ url: dbUrl, drop: dropDb } = await createEmptyDatabase());
   client = new pg.Client({ connectionString: dbUrl });
   await client.connect();
 });
 
 after(async () => {
   await client?.end();
-  if (!dbUrl) return;
-  const admin = new pg.Client({ connectionString: adminUrl });
-  await admin.connect();
-  await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
-  await admin.end();
+  await dropDb?.();
 });
 
 describe('migrations', () => {

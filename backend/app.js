@@ -6,6 +6,9 @@ import checkRouter from './routes/check.js';
 import analyzeRouter from './routes/analyze.js';
 import { createHealthRouter } from './routes/health.js';
 import { analyzeBody, checkBody, validateBody } from './routes/schemas.js';
+import { createAssignmentRouter } from './routes/assignments.js';
+import { createCourseContext } from './routes/courseContext.js';
+import { createCourseRouter } from './routes/courses.js';
 import { sendError } from './src/auth/errors.js';
 import { createAuthRouter } from './src/auth/routes.js';
 import { createExtensionRouter } from './src/jobs/deadlines/extensions.js';
@@ -31,9 +34,10 @@ function rateLimit({ windowMs = 60_000, max = 20 } = {}) {
 /**
  * @param {{ config: ReturnType<import('./config/index.js').loadConfig>,
  *           db: ReturnType<import('./db/pool.js').createDb>,
- *           metrics?: ReturnType<typeof createMetrics> }} deps
+ *           metrics?: ReturnType<typeof createMetrics>,
+ *           courseDeps?: object }} deps  courseDeps: overrides for createCourseContext (tests pass fakes)
  */
-export function createApp({ config, db, metrics = createMetrics() }) {
+export function createApp({ config, db, metrics = createMetrics(), courseDeps = {} }) {
   const app = express();
 
   app.set('trust proxy', 1); // correct req.ip behind Render/hosting proxies (for rate limiting)
@@ -54,6 +58,9 @@ export function createApp({ config, db, metrics = createMetrics() }) {
   app.use('/api/analyze', analyzeRouter);
   app.use('/api', createAuthRouter());
   app.use('/api', createExtensionRouter());
+  const courses = createCourseContext({ db, ...courseDeps });
+  app.use('/api', createCourseRouter(courses));
+  app.use('/api', createAssignmentRouter(courses));
 
   app.use((err, _req, res, _next) => {
     // Malformed JSON from express.json() is a bad body, not a server error.
