@@ -20,6 +20,10 @@ info:
       know about gives `404 NOT_FOUND`, so ids can't be probed.
     - `x-owner` and `x-step` show who builds the route and in which step. `x-status: existing` means the route is
       already on `develop` and this file only documents it.
+    - A path id that is malformed (not a uuid, or not a valid workspace id) is `404 NOT_FOUND`, the same as an unknown id.
+    - Archived courses are read-only: every change except unarchiving is `403 COURSE_ARCHIVED`.
+    - `503` with `AUTH_UNAVAILABLE`, `DB_UNAVAILABLE` or `FIRESTORE_UNAVAILABLE` means the server is missing the Firebase
+      Admin SDK, PostgreSQL or Firestore configuration. It is not listed on each route.
     - Errors are `{ "error": "<for people>", "code": "<for programs>", "details"?: [{ path, message }] }`.
       `details` lists Zod issues and never echoes the submitted values.
     - Lecturers see a workspace's content, analysis and grades only after it is submitted
@@ -322,6 +326,7 @@ paths:
       tags: [Courses]
       operationId: updateCourse
       summary: Edit a course, turn joining on or off, archive it
+      description: 'An archived course accepts only `{ "archived": false }` (with or without other fields); anything else is `403 COURSE_ARCHIVED`.'
       x-roles: [lecturer]
       x-access: Lecturer of this course
       x-owner: Sonam
@@ -1167,7 +1172,9 @@ paths:
                 required: [submission, analysis]
                 properties:
                   submission: { $ref: '#/components/schemas/Submission' }
-                  analysis: { $ref: '#/components/schemas/AnalysisResult' }
+                  analysis:
+                    description: null only if the analysis could not even be saved; the submission is kept either way.
+                    oneOf: [{ $ref: '#/components/schemas/AnalysisResult' }, { type: 'null' }]
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -1187,7 +1194,7 @@ paths:
       tags: [Analysis]
       operationId: getAnalysis
       summary: The analysis for a submission (latest first)
-      description: '`analysis_results` is append-only, so `history` shows every run. `current` is the newest.'
+      description: '`analysis_results` is append-only, so `history` shows every run. `current` is the newest. `404` if no analysis was saved.'
       x-roles: [student, lecturer, collegeAdmin, superAdmin]
       x-access: A member of the workspace, or a lecturer of its course, or an admin of its college
       x-owner: Sonam
@@ -1212,7 +1219,10 @@ paths:
       tags: [Analysis]
       operationId: rerunAnalysis
       summary: Run the analysis again (for example after the provider was unavailable)
-      description: Inserts a new `analysis_results` row and recomputes the suggested grades. Overrides are kept. At most 3 runs per submission per hour.
+      description: |
+        Inserts a new `analysis_results` row (the suggested grades are recomputed from step 2.8). Overrides are kept.
+        At most 3 runs per submission in any hour, counting the run made at submission time; then `429` with `Retry-After`.
+        `provider: legacy` is recorded with `fallbackReason: flag_legacy`.
       x-roles: [lecturer]
       x-access: Lecturer of its course
       x-owner: Sonam
@@ -2216,9 +2226,10 @@ components:
         payload:
           type: object
           description: |
-            metric: `{ timeSpent: seconds, edits: n, tabId? }`
-            paste: `{ length: n, changeType: 'paste-small' | 'paste-large', tabId? }`
-            version: `{ fileId, wordCount }`
+            metric: `{ timeSpent: minutes (fractions allowed), edits: n, tabId? }`
+            paste: `{ fileId, length: n, changeType: 'paste-small' | 'paste-large', tabId? }`
+            version: `{ fileId, wordCount, tabId? }`
+            A `tabId` matches `^[A-Za-z0-9_-]{1,64}$`. Any other field (for example `contentSnippet`) makes the event invalid.
     DocumentTab:
       type: object
       additionalProperties: false
@@ -2277,7 +2288,9 @@ components:
         provider: { type: string, enum: [openai, legacy] }
         model: { type: [string, 'null'] }
         status: { type: string, enum: [completed, partial, unavailable] }
-        fallbackReason: { type: [string, 'null'], enum: [openai_error, openai_timeout, budget_reached, flag_legacy, null] }
+        fallbackReason:
+          type: [string, 'null']
+          enum: [openai_error, openai_timeout, openai_invalid_output, openai_not_configured, budget_reached, flag_legacy, null]
         aiLikelihood: { type: [integer, 'null'], minimum: 0, maximum: 100 }
         flaggedSentences:
           type: array

@@ -8,6 +8,7 @@
 !backend/config/
 !backend/db/
 !backend/routes/
+!backend/schemas/
 !backend/services/
 !backend/src/
 !src/utils/difficultyDetection.js
@@ -17,6 +18,7 @@
 **/*.itest.js
 **/testFakes.js
 **/fakeFirestore.js
+**/testDatabase.js
 **/.env*
 **/*serviceAccount*.json
 **/*.json.key

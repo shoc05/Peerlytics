@@ -6,8 +6,17 @@ import checkRouter from './routes/check.js';
 import analyzeRouter from './routes/analyze.js';
 import { createHealthRouter } from './routes/health.js';
 import { analyzeBody, checkBody, validateBody } from './routes/schemas.js';
+import { createAssignmentRouter } from './routes/assignments.js';
+import { createCourseContext } from './routes/courseContext.js';
+import { createCourseRouter } from './routes/courses.js';
+import { createSubmissionRouter } from './routes/submissions.js';
+import { createAnalysisService } from './services/analysis/analysisService.js';
+import { createLegacyProvider } from './services/analysis/legacyProvider.js';
+import { createOpenAIProvider } from './services/analysis/openaiProvider.js';
+import { createWorkspaceStore } from './services/submissions/workspaceStore.js';
 import { sendError } from './src/auth/errors.js';
 import { createAuthRouter } from './src/auth/routes.js';
+import { getAdmin } from './src/auth/firebaseAdmin.js';
 import { createExtensionRouter } from './src/jobs/deadlines/extensions.js';
 import { createMetrics } from './src/metrics/index.js';
 
@@ -31,9 +40,12 @@ function rateLimit({ windowMs = 60_000, max = 20 } = {}) {
 /**
  * @param {{ config: ReturnType<import('./config/index.js').loadConfig>,
  *           db: ReturnType<import('./db/pool.js').createDb>,
- *           metrics?: ReturnType<typeof createMetrics> }} deps
+ *           metrics?: ReturnType<typeof createMetrics>,
+ *           courseDeps?: object, submissionDeps?: object }} deps
+ *   courseDeps: overrides for createCourseContext; submissionDeps: { analysis, store, ... } for
+ *   createSubmissionRouter. Tests pass fakes for Firebase, Firestore and the AI providers.
  */
-export function createApp({ config, db, metrics = createMetrics() }) {
+export function createApp({ config, db, metrics = createMetrics(), courseDeps = {}, submissionDeps = {} }) {
   const app = express();
 
   app.set('trust proxy', 1); // correct req.ip behind Render/hosting proxies (for rate limiting)
@@ -54,6 +66,20 @@ export function createApp({ config, db, metrics = createMetrics() }) {
   app.use('/api/analyze', analyzeRouter);
   app.use('/api', createAuthRouter());
   app.use('/api', createExtensionRouter());
+  const courses = createCourseContext({ db, ...courseDeps });
+  app.use('/api', createCourseRouter(courses));
+  app.use('/api', createAssignmentRouter(courses));
+  app.use(
+    '/api',
+    createSubmissionRouter(courses, {
+      analysis:
+        submissionDeps.analysis ??
+        createAnalysisService({ openai: createOpenAIProvider(config.openai), legacy: createLegacyProvider() }),
+      store: submissionDeps.store ?? createWorkspaceStore(courseDeps.getClients ?? getAdmin),
+      submitLimit: submissionDeps.submitLimit,
+      eventLimit: submissionDeps.eventLimit,
+    })
+  );
 
   app.use((err, _req, res, _next) => {
     // Malformed JSON from express.json() is a bad body, not a server error.
