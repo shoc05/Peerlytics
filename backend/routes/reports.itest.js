@@ -46,6 +46,7 @@ const store = {
   markSubmitted: async () => {},
   recordEvents: async () => {},
 };
+const flags = { course_dashboard_enabled: true };
 const mirror = Object.fromEntries(['create', 'update', 'addMember', 'removeMember', 'remove'].map((n) => [n, async () => {}]));
 
 let testDb;
@@ -67,7 +68,7 @@ before(async () => {
     config: loadConfig({}),
     db: { pool: testDb.pool, ping: async () => true, close: async () => {} },
     metrics: createMetrics({ registry: new client.Registry() }),
-    courseDeps: { getClients: () => ({ auth: fakeAuth({ tokens }) }), mirror },
+    courseDeps: { getClients: () => ({ auth: fakeAuth({ tokens }) }), mirror, getFlag: async (name) => flags[name] },
     submissionDeps: { analysis, store },
   });
   await new Promise((resolve) => {
@@ -82,6 +83,8 @@ before(async () => {
   ).json;
   state.group = (await call('lect', 'POST', `/assignments/${assignment.id}/groups`, { name: 'Team "Druk"', memberIds: ['stu-1', 'stu-2'] })).json;
   state.open = (await call('lect', 'POST', `/assignments/${assignment.id}/groups`, { name: 'Not yet' })).json;
+  state.course = course;
+  state.assignment = assignment;
 });
 
 after(async () => {
@@ -133,5 +136,39 @@ describe('report.xsl', () => {
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type'), /^text\/xsl/);
     assert.equal(res.text, readFileSync(new URL('../reports/report.xsl', import.meta.url), 'utf8'));
+  });
+});
+
+describe('course comparison', () => {
+  test('one row per submitted group, from the frozen metrics, the analysis and the final grades', async () => {
+    const res = await call('lect', 'GET', `/courses/${state.course.id}/comparison`);
+    assert.equal(res.status, 200);
+    assert.equal(res.json.courseId, state.course.id);
+    assert.equal(res.json.groups.length, 1, 'the unsubmitted group is left out');
+    const [g] = res.json.groups;
+    // Edits 75 and 25 -> Gini 0.5; 2 large pastes over 2 members -> medium; finals 9.17 and the override 4.
+    assert.deepEqual(
+      [g.workspaceId, g.memberCount, g.contributionGini, g.aiLikelihood, g.pasteLevel, g.largePastes, g.minGrade, g.maxGrade, g.averageGrade],
+      [state.group.id, 2, 0.5, 35, 'medium', 2, 4, 9.17, 6.59]
+    );
+  });
+
+  test('filtered by assignment', async () => {
+    const res = await call('lect', 'GET', `/courses/${state.course.id}/comparison?assignmentId=${state.assignment.id}`);
+    assert.equal(res.json.groups.length, 1);
+    assert.equal(res.json.assignmentId, state.assignment.id);
+  });
+
+  test('lecturers and admins of the course only', async () => {
+    assert.equal((await call('stu1', 'GET', `/courses/${state.course.id}/comparison`)).status, 403);
+    assert.equal((await call('lect2', 'GET', `/courses/${state.course.id}/comparison`)).status, 404);
+    assert.equal((await call('sadm', 'GET', `/courses/${state.course.id}/comparison`)).status, 200);
+  });
+
+  test('with course_dashboard_enabled off, 404 FEATURE_DISABLED', async () => {
+    flags.course_dashboard_enabled = false;
+    const res = await call('lect', 'GET', `/courses/${state.course.id}/comparison`);
+    flags.course_dashboard_enabled = true;
+    assert.equal(res.json.code, 'FEATURE_DISABLED');
   });
 });

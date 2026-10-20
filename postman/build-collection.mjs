@@ -130,6 +130,31 @@ r('Grades', 'Grades as CSV', 'GET', '/courses/{{courseId}}/grades.csv', {
 });
 r('Grades', 'Tasks are readable after submission', 'GET', '/workspaces/{{workspaceId}}/tasks', { as: 'lecturer', expect: 200 });
 
+// ── Peer evaluation (needs peer_eval_enabled on; CI turns it on) ──
+r('Peer evaluation', 'Rate your teammate', 'PUT', '/workspaces/{{workspaceId}}/peer-evaluations', {
+  as: 'student1', body: { ratings: [{ rateeId: '{{uid_student2}}', rating: 4, comment: 'Found the best sources.' }] }, expect: 200,
+});
+r('Peer evaluation', 'Rating yourself: 400', 'PUT', '/workspaces/{{workspaceId}}/peer-evaluations', {
+  as: 'student2', body: { ratings: [{ rateeId: '{{uid_student2}}', rating: 5 }] }, expect: 400, code: 'INVALID_BODY',
+});
+r('Peer evaluation', 'Ratings I gave', 'GET', '/workspaces/{{workspaceId}}/peer-evaluations', { as: 'student1', expect: 200, tests: [`pm.expect(json.ratings.length).to.eql(1);`] });
+r('Peer evaluation', 'Lecturer sees averages, not raters', 'GET', '/workspaces/{{workspaceId}}/peer-evaluations', {
+  as: 'lecturer', expect: 200, tests: [`pm.expect(JSON.stringify(json)).to.not.include('rater');`],
+});
+
+// ── Random groups (a fresh assignment, so all three students are ungrouped) ──
+r('Random groups', 'An assignment to group', 'POST', '/courses/{{courseId}}/assignments', { as: 'lecturer', body: { title: 'Pair work', brief: 'x', deadline: '{{deadline}}' }, expect: 201, save: { autoAssignmentId: 'json.id' } });
+r('Random groups', 'Shuffle students into groups', 'POST', '/assignments/{{autoAssignmentId}}/groups/auto', {
+  as: 'lecturer', body: { size: 2 }, expect: 201, tests: [`pm.expect(json.groups.reduce((n, g) => n + g.members.length, 0)).to.eql(3);`],
+});
+r('Random groups', 'Nobody left: 409 NOT_ENOUGH_STUDENTS', 'POST', '/assignments/{{autoAssignmentId}}/groups/auto', { as: 'lecturer', body: { size: 2 }, expect: 409, code: 'NOT_ENOUGH_STUDENTS' });
+
+// ── Course comparison (needs course_dashboard_enabled on; CI turns it on) ──
+r('Comparison', 'Compare the groups in a course', 'GET', '/courses/{{courseId}}/comparison', {
+  as: 'lecturer', expect: 200, tests: [`pm.expect(json.groups.length).to.be.above(0);`, `pm.expect(json.groups[0].contributionGini).to.be.within(0, 1);`],
+});
+r('Comparison', 'Students cannot see it: 403', 'GET', '/courses/{{courseId}}/comparison', { as: 'student1', expect: 403 });
+
 // ── Reports ──
 r('Reports', 'Report as XML', 'GET', '/workspaces/{{workspaceId}}/report.xml', {
   as: 'lecturer', expect: 200, json: false, tests: [`pm.expect(pm.response.text()).to.include('<?xml-stylesheet type="text/xsl"');`],
@@ -143,10 +168,6 @@ r('Legacy', 'Old /analyze', 'POST', '/analyze', { as: null, body: { text: 'A lon
 // ── In the contract, not built yet: 404 until their step lands. When one is built this
 // request fails, which is the reminder to move it up and give it real checks. ──
 const notYet = (name, method, path, as, body) => r('Not built yet', `${name} (404 until built)`, method, path, { as, body, expect: 404 });
-notYet('Random groups (3.7)', 'POST', '/assignments/{{assignmentId}}/groups/auto', 'lecturer', { size: 2 });
-notYet('Peer ratings (3.7)', 'GET', '/workspaces/{{workspaceId}}/peer-evaluations', 'student1');
-notYet('Rate teammates (3.7)', 'PUT', '/workspaces/{{workspaceId}}/peer-evaluations', 'student1', { ratings: [{ rateeId: '{{uid_student2}}', rating: 4 }] });
-notYet('Course comparison (4.7)', 'GET', '/courses/{{courseId}}/comparison', 'lecturer');
 notYet('Usage (3.10)', 'GET', '/usage', 'superAdmin');
 notYet('Delete my data (4.9)', 'DELETE', '/me/data', 'spare', { confirm: 'DELETE' });
 notYet('Delete a user’s data (4.9)', 'DELETE', '/admin/users/{{uid_spare}}/data', 'superAdmin', { confirm: 'DELETE' });
@@ -240,7 +261,7 @@ const collection = {
     schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
   },
   item: folders,
-  variable: ['courseId', 'joinCode', 'announcementId', 'assignmentId', 'spareAssignmentId', 'deadline', 'extendedDeadline', 'workspaceId', 'taskId', 'spareTaskId', 'submissionId', 'gradeId'].map(
+  variable: ['autoAssignmentId', 'courseId', 'joinCode', 'announcementId', 'assignmentId', 'spareAssignmentId', 'deadline', 'extendedDeadline', 'workspaceId', 'taskId', 'spareTaskId', 'submissionId', 'gradeId'].map(
     (key) => ({ key, value: '' })
   ),
 };

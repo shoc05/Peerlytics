@@ -1,0 +1,42 @@
+# Public routes through k3s's Traefik, HTTPS with the Let's Encrypt resolver set up in
+# infra/k8s/traefik/. The website itself is on Firebase Hosting; only the API and the collab
+# websockets come through here. /metrics is never routed: Prometheus scrapes it in the cluster.
+# Hosts are placeholders; each overlay sets the real ones.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: peerlytics-api
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: api.peerlytics.example
+      http:
+        paths:
+          # Only /api: the backend's /metrics stays inside the cluster.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: peerlytics-backend
+                port: { name: http }
+---
+# Websockets work through Traefik as they are. An IngressRoute (Traefik's own resource) is used
+# here because a plain Ingress can't exclude /metrics on a path-prefix "/" route.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: peerlytics-collab
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`collab.peerlytics.example`) && !PathPrefix(`/metrics`)
+      services:
+        - name: peerlytics-collab
+          port: http
+  tls:
+    certResolver: letsencrypt

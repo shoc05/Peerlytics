@@ -44,6 +44,18 @@ export function createGroupMirror(getClients) {
     async removeMember(id, uid) {
       await groups().doc(id).update({ memberIds: FieldValue.arrayRemove(uid) });
     },
+    /** An in-app notification for one user (users/{uid}/notifications, as the app writes them). */
+    async notify(uid, { type, message, groupId }) {
+      const db = getClients()?.db;
+      if (!db) throw fail(503, 'FIRESTORE_UNAVAILABLE');
+      await db.collection('users').doc(uid).collection('notifications').add({
+        type,
+        message,
+        groupId,
+        read: false,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    },
     /** The group document and everything under it (files, documents' versions, activity). */
     async remove(id) {
       const col = groups();

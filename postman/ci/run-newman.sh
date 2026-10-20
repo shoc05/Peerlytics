@@ -10,7 +10,7 @@ node postman/ci/seed-emulator.mjs > "$out/postman-env.json"
 
 # The API reads FIREBASE_AUTH_EMULATOR_HOST / FIRESTORE_EMULATOR_HOST / GCLOUD_PROJECT from
 # the emulator environment, so it verifies emulator tokens and writes to the emulator.
-(cd backend && PORT=5000 node server.js > "$out/backend.log" 2>&1) &
+(cd backend && PORT=5000 FLAG_PEER_EVAL_ENABLED=true FLAG_COURSE_DASHBOARD_ENABLED=true node server.js > "$out/backend.log" 2>&1) &
 api_pid=$!
 trap 'kill "$api_pid" 2>/dev/null || true' EXIT
 

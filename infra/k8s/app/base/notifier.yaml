@@ -1,0 +1,76 @@
+# Deadline emails, in-app and push notifications (notifier/, step 2.5, Sangay).
+# replicas: 0 until the notifier image is published; then set 1 in the overlays. The port and
+# health path are the team convention (port named "http", GET /health); match them to
+# notifier/ when it lands.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: peerlytics-notifier
+  labels:
+    app.kubernetes.io/name: peerlytics-notifier
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: peerlytics-notifier
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: peerlytics-notifier
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: notifier
+          image: ghcr.io/shoc05/peerlytics-notifier
+          ports:
+            - { name: http, containerPort: 8080 }
+          envFrom:
+            - configMapRef: { name: peerlytics-config }
+          env:
+            - name: PORT
+              value: "8080"
+            - name: SMTP_USER
+              valueFrom: { secretKeyRef: { name: peerlytics-smtp, key: SMTP_USER, optional: true } }
+            - name: SMTP_PASS
+              valueFrom: { secretKeyRef: { name: peerlytics-smtp, key: SMTP_PASS, optional: true } }
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: firebase, mountPath: /var/run/secrets/peerlytics/firebase, readOnly: true }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
+        - name: firebase
+          secret:
+            secretName: peerlytics-firebase
+            optional: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: peerlytics-notifier
+  labels:
+    app.kubernetes.io/name: peerlytics-notifier
+spec:
+  selector:
+    app.kubernetes.io/name: peerlytics-notifier
+  ports:
+    - { name: http, port: 8080, targetPort: http }

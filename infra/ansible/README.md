@@ -60,6 +60,20 @@ kubectl get nodes
 kubectl get namespaces    # staging, production, monitoring
 ```
 
+## Proving it on a fresh server (step 5.2)
+
+The playbook is only proven once it has built a server from nothing. Do this before go-live:
+
+1. Create a new Ubuntu 24.04 VPS with only your SSH key, and put its address in `inventory.ini`.
+2. Run the first-run command above, then run it again as `deploy`. The second run must end with `changed=0`, or only package updates.
+3. Run every command in "Check the result".
+4. Apply the app: the secrets and `kubectl apply -k infra/k8s/app/overlays/production` (see `infra/k8s/app/README.md`). Then run `infra/scripts/restore-drill.sh -n production` after the first nightly backup.
+5. Record the run below with the real numbers.
+
+| Date | Ubuntu | First run (min) | Second run `changed=` | SSH root / password refused | Open ports | Namespaces | Who |
+|---|---|---|---|---|---|---|---|
+| | | | | | | | |
+
 ## Notes
 
 - Docker's published ports (`docker run -p`) bypass ufw. The apps run in k3s, not plain Docker; use Docker only to build images.
