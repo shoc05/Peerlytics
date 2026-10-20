@@ -1,0 +1,55 @@
+# Production (step 5.2): the same base as staging; only these values differ.
+# Deployed from v* release tags with Sangay's approval (GitHub environment "production").
+#   kubectl apply -k infra/k8s/app/overlays/production
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: production
+resources:
+  - ../../base
+labels:
+  - pairs:
+      peerlytics/environment: production
+    includeSelectors: false
+images:
+  # Always a release tag, never a moving tag. The deploy job sets it from the v* tag it deploys.
+  - name: ghcr.io/shoc05/peerlytics-backend
+    newTag: v1.0.0
+  - name: ghcr.io/shoc05/peerlytics-collab
+    newTag: v1.0.0
+  - name: ghcr.io/shoc05/peerlytics-notifier
+    newTag: v1.0.0
+patches:
+  - target: { kind: ConfigMap, name: peerlytics-config }
+    patch: |-
+      - op: replace
+        path: /data/CORS_ORIGIN
+        value: https://peerlytics.example
+  - target: { kind: Ingress, name: peerlytics-api }
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: api.peerlytics.example
+  - target: { kind: IngressRoute, name: peerlytics-collab }
+    patch: |-
+      - op: replace
+        path: /spec/routes/0/match
+        value: Host(`collab.peerlytics.example`) && !PathPrefix(`/metrics`)
+  # More room for a whole college's term.
+  - target: { kind: Deployment, name: peerlytics-backend }
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value: { requests: { cpu: 200m, memory: 256Mi }, limits: { cpu: "2", memory: 768Mi } }
+  - target: { kind: StatefulSet, name: peerlytics-postgres }
+    patch: |-
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 20Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value: { requests: { cpu: 200m, memory: 512Mi }, limits: { cpu: "2", memory: 2Gi } }
+  - target: { kind: PersistentVolumeClaim, name: peerlytics-backups }
+    patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 20Gi

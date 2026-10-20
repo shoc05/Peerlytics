@@ -1,6 +1,6 @@
 # Peerlytics on Kubernetes (k3s)
 
-Step 4.1 · Owner: Sonam. The cluster comes from `infra/ansible` (step 3.3). Monitoring is in `infra/k8s/monitoring` (Kezang).
+Steps 4.1 and 5.2 · Owner: Sonam. The cluster comes from `infra/ansible` (step 3.3). Monitoring is in `infra/k8s/monitoring` (Kezang).
 
 ```
 infra/k8s/app/
@@ -12,7 +12,8 @@ infra/k8s/app/
     collab.yaml         Hocuspocus/Yjs websockets Deployment + Service
     notifier.yaml       notifier Deployment + Service (replicas 0 until its image exists)
     ingress.yaml        api.<domain> -> backend /api; collab.<domain> -> collab (never /metrics)
-  overlays/staging/     namespace staging, hosts, image tags, smaller disks
+  overlays/staging/     namespace staging, hosts, image tags (develop), smaller disks
+  overlays/production/  namespace production, real hosts, release tags (v*), bigger limits and disks
 infra/k8s/traefik/      HTTPS with Let's Encrypt for k3s's Traefik (cluster-wide, once)
 ```
 
@@ -76,7 +77,7 @@ kubectl -n staging create job --from=cronjob/peerlytics-postgres-backup backup-n
 kubectl -n staging logs job/backup-now
 ```
 
-The dumps are on the `peerlytics-backups` disk, on the same server. Copying them off the server, and the restore drill, are step 5.2 (`infra/scripts/restore-drill.sh`).
+The dumps are on the `peerlytics-backups` disk, on the same server. Prove they restore with `infra/scripts/restore-drill.sh -n <namespace>` (see `docs/restore-drill.md`). Copying them off the server is step 5.5 (Tshewang).
 
 ## Notes
 
