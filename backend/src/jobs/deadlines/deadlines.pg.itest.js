@@ -110,11 +110,12 @@ describe('deadline store on PostgreSQL', () => {
   });
 
   test('only open workspaces are due, earliest deadline first', async () => {
-    await addWorkspace('w-late');
+    // No members: a student is in at most one group per assignment.
+    await addWorkspace('w-late', { members: [] });
     await extend('w-late', DEADLINE + 60_000, DEADLINE - 1000);
-    await addWorkspace('w-first');
-    await addWorkspace('w-done', { status: 'submitted' });
-    await addWorkspace('w-locked', { status: 'locked' });
+    await addWorkspace('w-first', { members: [] });
+    await addWorkspace('w-done', { status: 'submitted', members: [] });
+    await addWorkspace('w-locked', { status: 'locked', members: [] });
     const due = await store.dueWorkspaces(DEADLINE + 3600_000);
     assert.deepEqual(due.map((w) => w.id), ['w-first', 'w-late']);
   });
