@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Peerlytics workspace report (step 2.10). Describes what GET /api/workspaces/{id}/report.xml
+  returns; backend/routes/reports.itest.js checks a real report against this file with libxml2.
+
+  Rules the schema enforces:
+  - scores and grades are 0-10 with at most two decimals; AI likelihood is 0-100;
+  - rubric weights are 0-1 (their sum of 1.00 is checked by the database and the API);
+  - every student id is unique (xs:key studentId);
+  - a flagged sentence's authorRef, when present, names a student in the report (xs:keyref).
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+
+  <xs:simpleType name="Score">
+    <xs:restriction base="xs:decimal">
+      <xs:minInclusive value="0"/>
+      <xs:maxInclusive value="10"/>
+      <xs:fractionDigits value="2"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="Weight">
+    <xs:restriction base="xs:decimal">
+      <xs:minInclusive value="0"/>
+      <xs:maxInclusive value="1"/>
+      <xs:fractionDigits value="2"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="Uid">
+    <xs:restriction base="xs:string">
+      <xs:minLength value="1"/>
+      <xs:maxLength value="128"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="Count">
+    <xs:restriction base="xs:nonNegativeInteger"/>
+  </xs:simpleType>
+
+  <xs:simpleType name="NonEmptyText">
+    <xs:restriction base="xs:string">
+      <xs:minLength value="1"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:element name="report">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="course">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="title" type="NonEmptyText"/>
+            </xs:sequence>
+            <xs:attribute name="id" type="xs:string" use="required"/>
+            <xs:attribute name="code" type="NonEmptyText" use="required"/>
+          </xs:complexType>
+        </xs:element>
+
+        <xs:element name="assignment">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="title" type="NonEmptyText"/>
+              <xs:element name="rubric">
+                <xs:complexType>
+                  <xs:attribute name="time" type="Weight" use="required"/>
+                  <xs:attribute name="edits" type="Weight" use="required"/>
+                  <xs:attribute name="writing" type="Weight" use="required"/>
+                  <xs:attribute name="tasks" type="Weight" use="required"/>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+            <xs:attribute name="id" type="xs:string" use="required"/>
+            <xs:attribute name="deadline" type="xs:dateTime" use="required"/>
+            <xs:attribute name="timeCapMinutes" type="xs:positiveInteger"/>
+          </xs:complexType>
+        </xs:element>
+
+        <xs:element name="workspace">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="name" type="NonEmptyText"/>
+            </xs:sequence>
+            <xs:attribute name="id" type="xs:string" use="required"/>
+            <xs:attribute name="status">
+              <xs:simpleType>
+                <xs:restriction base="xs:string">
+                  <xs:enumeration value="submitted"/>
+                  <xs:enumeration value="locked"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:attribute>
+            <xs:attribute name="submittedAt" type="xs:dateTime" use="required"/>
+            <xs:attribute name="trigger" use="required">
+              <xs:simpleType>
+                <xs:restriction base="xs:string">
+                  <xs:enumeration value="manual"/>
+                  <xs:enumeration value="deadline"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:attribute>
+            <xs:attribute name="wordCount" type="Count" use="required"/>
+          </xs:complexType>
+        </xs:element>
+
+        <xs:element name="analysis" minOccurs="0">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="notice" type="NonEmptyText"/>
+              <xs:element name="flaggedSentence" minOccurs="0" maxOccurs="50">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="sentence" type="NonEmptyText"/>
+                    <xs:element name="reason" type="NonEmptyText"/>
+                  </xs:sequence>
+                  <xs:attribute name="authorRef" type="Uid"/>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+            <xs:attribute name="provider" use="required">
+              <xs:simpleType>
+                <xs:restriction base="xs:string">
+                  <xs:enumeration value="openai"/>
+                  <xs:enumeration value="legacy"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:attribute>
+            <xs:attribute name="status" use="required">
+              <xs:simpleType>
+                <xs:restriction base="xs:string">
+                  <xs:enumeration value="completed"/>
+                  <xs:enumeration value="partial"/>
+                  <xs:enumeration value="unavailable"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:attribute>
+            <xs:attribute name="fallbackReason" type="xs:string"/>
+            <xs:attribute name="aiLikelihood">
+              <xs:simpleType>
+                <xs:restriction base="xs:integer">
+                  <xs:minInclusive value="0"/>
+                  <xs:maxInclusive value="100"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:attribute>
+            <xs:attribute name="writingQuality" type="Score"/>
+            <xs:attribute name="analysedAt" type="xs:dateTime" use="required"/>
+          </xs:complexType>
+        </xs:element>
+
+        <xs:element name="students">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="student" minOccurs="0" maxOccurs="unbounded">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="name" type="NonEmptyText"/>
+                    <xs:element name="metrics">
+                      <xs:complexType>
+                        <xs:attribute name="timeSpentSec" type="Count" use="required"/>
+                        <xs:attribute name="edits" type="Count" use="required"/>
+                        <xs:attribute name="pasteEvents" type="Count" use="required"/>
+                        <xs:attribute name="largePastes" type="Count" use="required"/>
+                      </xs:complexType>
+                    </xs:element>
+                    <!-- Present once the student has been graded. -->
+                    <xs:sequence minOccurs="0">
+                      <xs:element name="scores">
+                        <xs:complexType>
+                          <xs:attribute name="time" type="Score" use="required"/>
+                          <xs:attribute name="edits" type="Score" use="required"/>
+                          <!-- Absent when it could not be measured; its weight was shared. -->
+                          <xs:attribute name="writing" type="Score"/>
+                          <xs:attribute name="tasks" type="Score"/>
+                        </xs:complexType>
+                      </xs:element>
+                      <xs:element name="deductions">
+                        <xs:complexType>
+                          <xs:sequence>
+                            <xs:element name="deduction" minOccurs="0" maxOccurs="unbounded">
+                              <xs:complexType>
+                                <xs:sequence>
+                                  <xs:element name="reason" type="NonEmptyText"/>
+                                </xs:sequence>
+                                <xs:attribute name="kind" use="required">
+                                  <xs:simpleType>
+                                    <xs:restriction base="xs:string">
+                                      <xs:enumeration value="ai"/>
+                                      <xs:enumeration value="paste"/>
+                                    </xs:restriction>
+                                  </xs:simpleType>
+                                </xs:attribute>
+                                <xs:attribute name="points" type="Score" use="required"/>
+                              </xs:complexType>
+                            </xs:element>
+                          </xs:sequence>
+                        </xs:complexType>
+                      </xs:element>
+                      <xs:element name="grade">
+                        <xs:complexType>
+                          <xs:sequence>
+                            <xs:element name="override" minOccurs="0">
+                              <xs:complexType>
+                                <xs:sequence>
+                                  <xs:element name="reason" type="NonEmptyText"/>
+                                </xs:sequence>
+                                <xs:attribute name="by" type="NonEmptyText" use="required"/>
+                                <xs:attribute name="at" type="xs:dateTime" use="required"/>
+                              </xs:complexType>
+                            </xs:element>
+                          </xs:sequence>
+                          <xs:attribute name="suggested" type="Score" use="required"/>
+                          <xs:attribute name="final" type="Score" use="required"/>
+                          <xs:attribute name="overridden" type="xs:boolean" use="required"/>
+                        </xs:complexType>
+                      </xs:element>
+                      <xs:element name="explanation" type="NonEmptyText"/>
+                    </xs:sequence>
+                  </xs:sequence>
+                  <xs:attribute name="id" type="Uid" use="required"/>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="version" type="xs:positiveInteger" use="required"/>
+      <xs:attribute name="generatedAt" type="xs:dateTime" use="required"/>
+    </xs:complexType>
+
+    <!-- Every student id is unique, and flags can only point at a student in this report. -->
+    <xs:key name="studentId">
+      <xs:selector xpath="students/student"/>
+      <xs:field xpath="@id"/>
+    </xs:key>
+    <xs:keyref name="flagAuthor" refer="studentId">
+      <xs:selector xpath="analysis/flaggedSentence"/>
+      <xs:field xpath="@authorRef"/>
+    </xs:keyref>
+  </xs:element>
+</xs:schema>

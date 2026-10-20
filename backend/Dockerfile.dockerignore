@@ -8,6 +8,7 @@
 !backend/config/
 !backend/db/
 !backend/grading/
+!backend/reports/
 !backend/routes/
 !backend/schemas/
 !backend/services/
@@ -20,6 +21,7 @@
 **/testFakes.js
 **/fakeFirestore.js
 **/testDatabase.js
+**/testTools.js
 **/.env*
 **/*serviceAccount*.json
 **/*.json.key
