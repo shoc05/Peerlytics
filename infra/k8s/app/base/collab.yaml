@@ -1,0 +1,80 @@
+# Hocuspocus + Yjs live editing (websockets). Documents are stored in Firestore, so the pod
+# keeps no state. One replica: Hocuspocus needs a shared broker (e.g. Redis) before it can
+# run more than one instance.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: peerlytics-collab
+  labels:
+    app.kubernetes.io/name: peerlytics-collab
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: peerlytics-collab
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: peerlytics-collab
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: collab
+          image: ghcr.io/shoc05/peerlytics-collab
+          ports:
+            - { name: http, containerPort: 1234 }
+          envFrom:
+            - configMapRef: { name: peerlytics-config }
+          env:
+            - name: METRICS_TOKEN
+              valueFrom: { secretKeyRef: { name: peerlytics-metrics, key: METRICS_TOKEN, optional: true } }
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: "1", memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: firebase, mountPath: /var/run/secrets/peerlytics/firebase, readOnly: true }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
+        - name: firebase
+          secret:
+            secretName: peerlytics-firebase
+            optional: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: peerlytics-collab
+  labels:
+    app.kubernetes.io/name: peerlytics-collab
+spec:
+  selector:
+    app.kubernetes.io/name: peerlytics-collab
+  ports:
+    - { name: http, port: 1234, targetPort: http }

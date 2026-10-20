@@ -149,6 +149,12 @@ r('Random groups', 'Shuffle students into groups', 'POST', '/assignments/{{autoA
 });
 r('Random groups', 'Nobody left: 409 NOT_ENOUGH_STUDENTS', 'POST', '/assignments/{{autoAssignmentId}}/groups/auto', { as: 'lecturer', body: { size: 2 }, expect: 409, code: 'NOT_ENOUGH_STUDENTS' });
 
+// ── Course comparison (needs course_dashboard_enabled on; CI turns it on) ──
+r('Comparison', 'Compare the groups in a course', 'GET', '/courses/{{courseId}}/comparison', {
+  as: 'lecturer', expect: 200, tests: [`pm.expect(json.groups.length).to.be.above(0);`, `pm.expect(json.groups[0].contributionGini).to.be.within(0, 1);`],
+});
+r('Comparison', 'Students cannot see it: 403', 'GET', '/courses/{{courseId}}/comparison', { as: 'student1', expect: 403 });
+
 // ── Reports ──
 r('Reports', 'Report as XML', 'GET', '/workspaces/{{workspaceId}}/report.xml', {
   as: 'lecturer', expect: 200, json: false, tests: [`pm.expect(pm.response.text()).to.include('<?xml-stylesheet type="text/xsl"');`],
@@ -162,7 +168,6 @@ r('Legacy', 'Old /analyze', 'POST', '/analyze', { as: null, body: { text: 'A lon
 // ── In the contract, not built yet: 404 until their step lands. When one is built this
 // request fails, which is the reminder to move it up and give it real checks. ──
 const notYet = (name, method, path, as, body) => r('Not built yet', `${name} (404 until built)`, method, path, { as, body, expect: 404 });
-notYet('Course comparison (4.7)', 'GET', '/courses/{{courseId}}/comparison', 'lecturer');
 notYet('Usage (3.10)', 'GET', '/usage', 'superAdmin');
 notYet('Delete my data (4.9)', 'DELETE', '/me/data', 'spare', { confirm: 'DELETE' });
 notYet('Delete a user’s data (4.9)', 'DELETE', '/admin/users/{{uid_spare}}/data', 'superAdmin', { confirm: 'DELETE' });

@@ -1,0 +1,47 @@
+# Staging: deployed from develop. Same manifests as production (step 5.2 adds that overlay);
+# only these values differ.
+#   kubectl apply -k infra/k8s/app/overlays/staging
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: staging
+resources:
+  - ../../base
+labels:
+  - pairs:
+      peerlytics/environment: staging
+    includeSelectors: false
+images:
+  # The deploy job pins each image to the commit it built (Tshewang, steps 1.9/4.3).
+  - name: ghcr.io/shoc05/peerlytics-backend
+    newTag: develop
+  - name: ghcr.io/shoc05/peerlytics-collab
+    newTag: develop
+  - name: ghcr.io/shoc05/peerlytics-notifier
+    newTag: develop
+patches:
+  - target: { kind: ConfigMap, name: peerlytics-config }
+    patch: |-
+      - op: replace
+        path: /data/CORS_ORIGIN
+        value: https://staging.peerlytics.example
+  - target: { kind: Ingress, name: peerlytics-api }
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: api.staging.peerlytics.example
+  - target: { kind: IngressRoute, name: peerlytics-collab }
+    patch: |-
+      - op: replace
+        path: /spec/routes/0/match
+        value: Host(`collab.staging.peerlytics.example`) && !PathPrefix(`/metrics`)
+  # Smaller disks on staging.
+  - target: { kind: StatefulSet, name: peerlytics-postgres }
+    patch: |-
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 5Gi
+  - target: { kind: PersistentVolumeClaim, name: peerlytics-backups }
+    patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 5Gi

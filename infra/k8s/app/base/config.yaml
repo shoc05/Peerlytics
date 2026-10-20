@@ -1,0 +1,20 @@
+# Settings that are not secret. Secrets (database password, Firebase service account, API keys)
+# are created with kubectl, never committed: see infra/k8s/app/README.md.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: peerlytics-config
+data:
+  NODE_ENV: production
+  DEADLINE_TIMEZONE: Asia/Thimphu
+  # The website's origin; the overlay sets the real one.
+  CORS_ORIGIN: https://peerlytics.example
+  DATABASE_POOL_MAX: "10"
+  # Empty: analysis uses Hugging Face + Virtual Writing Tutor until a model is chosen (step 2.4).
+  OPENAI_MODEL: ""
+  OPENAI_TIMEOUT_MS: "30000"
+  OPENAI_PRICE_INPUT_PER_1M: "0"
+  OPENAI_PRICE_OUTPUT_PER_1M: "0"
+  COLLAB_PORT: "1234"
+  COLLAB_DEBOUNCE_MS: "2000"
+  FIREBASE_SERVICE_ACCOUNT: /var/run/secrets/peerlytics/firebase/service-account.json
