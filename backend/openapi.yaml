@@ -2319,7 +2319,7 @@ components:
       type: object
       required: [kind, points, reason]
       properties:
-        kind: { type: string, enum: [ai, paste, late, inactivity] }
+        kind: { type: string, enum: [ai, paste] }
         points: { type: number, minimum: 0, maximum: 10 }
         reason: { type: string }
     Grade:
@@ -2334,14 +2334,20 @@ components:
         scores:
           type: object
           required: [time, edits, writing, tasks]
+          description: |
+            Time and Edits are always measured. Writing is null when no analysis was available; Tasks is null
+            when the group made no tasks. A null score's weight is shared among the others (see `explanation`).
           properties:
             time: { $ref: '#/components/schemas/Score' }
             edits: { $ref: '#/components/schemas/Score' }
-            writing: { $ref: '#/components/schemas/Score' }
-            tasks: { $ref: '#/components/schemas/Score' }
+            writing: { oneOf: [{ $ref: '#/components/schemas/Score' }, { type: 'null' }] }
+            tasks: { oneOf: [{ $ref: '#/components/schemas/Score' }, { type: 'null' }] }
         weights: { $ref: '#/components/schemas/RubricWeights' }
         deductions:
           type: array
+          description: |
+            Only for the student responsible. Large pastes by this student: 1 = −1, 2–3 = −2, 4+ = −3.
+            AI: only sentences the analysis attributes to this student, 1–2 = −1, 3+ = −2 (a signal, not proof).
           items: { $ref: '#/components/schemas/Deduction' }
         suggested: { $ref: '#/components/schemas/Score' }
         final: { $ref: '#/components/schemas/Score' }

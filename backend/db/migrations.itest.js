@@ -85,20 +85,22 @@ describe('migrations', () => {
     assert.deepEqual(await tables(), TABLES);
   });
 
-  test('each migration can be undone one at a time', async () => {
-    const reasonCheck = async () =>
-      (await client.query(`SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'analysis_results_fallback_reason_check'`)).rows[0].def;
-    const trigger = async () => (await client.query(`SELECT 1 FROM pg_trigger WHERE tgname = 'analysis_results_immutable'`)).rows.length;
-
-    assert.match(await reasonCheck(), /openai_not_configured/);
-    await migrate('down', 1);
-    assert.doesNotMatch(await reasonCheck(), /openai_not_configured/, 'the fallback-reasons migration is undone first');
-    assert.equal(await trigger(), 1);
-    await migrate('down', 1);
-    assert.equal(await trigger(), 0, 'then the trigger migration');
-    assert.deepEqual(await tables(), TABLES, 'the tables are still there');
+  test('each migration can be undone one at a time, newest first', async () => {
+    const one = async (sql) => (await client.query(sql)).rows[0];
+    // Newest first. Each check is true while that migration is applied. Add a line per new migration.
+    const steps = [
+      ['nullable grade scores', async () => (await one(`SELECT is_nullable FROM information_schema.columns WHERE table_name = 'grades' AND column_name = 'tasks_score'`)).is_nullable === 'YES'],
+      ['more fallback reasons', async () => /openai_not_configured/.test((await one(`SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'analysis_results_fallback_reason_check'`)).def)],
+      ['append-only triggers', async () => Boolean(await one(`SELECT 1 FROM pg_trigger WHERE tgname = 'analysis_results_immutable'`))],
+    ];
+    for (const [name, applied] of steps) {
+      assert.equal(await applied(), true, `${name} is applied`);
+      await migrate('down', 1);
+      assert.equal(await applied(), false, `${name} is undone`);
+    }
+    assert.deepEqual(await tables(), TABLES, 'only the initial schema is left');
     await migrate('up');
-    assert.match(await reasonCheck(), /openai_not_configured/);
+    for (const [name, applied] of steps) assert.equal(await applied(), true, `${name} is applied again`);
   });
 });
 

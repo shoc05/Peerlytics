@@ -10,6 +10,8 @@ import { createAssignmentRouter } from './routes/assignments.js';
 import { createCourseContext } from './routes/courseContext.js';
 import { createCourseRouter } from './routes/courses.js';
 import { createSubmissionRouter } from './routes/submissions.js';
+import { createGradeRouter } from './routes/grades.js';
+import { createTaskRouter } from './routes/tasks.js';
 import { createAnalysisService } from './services/analysis/analysisService.js';
 import { createLegacyProvider } from './services/analysis/legacyProvider.js';
 import { createOpenAIProvider } from './services/analysis/openaiProvider.js';
@@ -69,6 +71,8 @@ export function createApp({ config, db, metrics = createMetrics(), courseDeps = 
   const courses = createCourseContext({ db, ...courseDeps });
   app.use('/api', createCourseRouter(courses));
   app.use('/api', createAssignmentRouter(courses));
+  app.use('/api', createTaskRouter(courses));
+  app.use('/api', createGradeRouter(courses));
   app.use(
     '/api',
     createSubmissionRouter(courses, {

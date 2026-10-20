@@ -15,6 +15,7 @@ import { validateTrackingEvent } from '../services/analysis/validate.js';
 import { wordCount } from '../services/analysis/text.js';
 import { reportTabs } from '../src/tabs/reportTabs.js';
 import * as map from '../services/submissions/mappers.js';
+import { recomputeGrades } from '../services/grading/gradeService.js';
 
 const RERUNS_PER_HOUR = 3;
 
@@ -47,6 +48,14 @@ export function createSubmissionRouter(ctx, { analysis, store, submitLimit, even
   const router = express.Router();
   const limitSubmit = submitLimit ?? createUserRateLimit({ max: 5, windowMs: 60_000, now });
   const limitEvents = eventLimit ?? createUserRateLimit({ max: 60, windowMs: 60_000, now });
+
+  async function regrade(workspaceId) {
+    try {
+      await withTransaction(db.pool, (q) => recomputeGrades(q, workspaceId));
+    } catch (err) {
+      console.error('[grades] could not compute grades:', err.message);
+    }
+  }
 
   /** A member of an open workspace (students only reach this through guard('student')). */
   async function openWorkspaceForMember(req) {
@@ -129,6 +138,8 @@ export function createSubmissionRouter(ctx, { analysis, store, submitLimit, even
       } catch (err) {
         console.error('[submission] analysis could not be saved:', err.message);
       }
+      // Suggested grades (step 2.8). Like the analysis, a failure here never fails the submission.
+      await regrade(workspaceId);
 
       const { rows } = await db.pool.query(`${SUBMISSION_SELECT} WHERE s.id = $1`, [submissionId]);
       res.status(201).json({
@@ -199,6 +210,7 @@ export function createSubmissionRouter(ctx, { analysis, store, submitLimit, even
         courseId: access.course.id,
         provider,
       });
+      await regrade(access.workspace.id);
       res.status(201).json(map.analysisResult(row));
     })
   );
