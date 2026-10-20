@@ -52,6 +52,42 @@ jobs:
       - name: Test
         run: npm test
 
+  backend-db:
+    # Not a required check yet (step 0.6/1.5, Sonam). Ask Sangay to add it in scripts/setup-github.sh.
+    name: backend db (migrations, docker)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: peerlytics
+          # Throwaway CI-only database; not a secret.
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U peerlytics"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - name: Migrations up/down and the append-only triggers on a real PostgreSQL
+        working-directory: backend
+        env:
+          TEST_DATABASE_URL: postgres://peerlytics:ci-only-password@127.0.0.1:5432/postgres
+        run: npm run test:db
+      - name: Build the backend image
+        run: docker build -f backend/Dockerfile -t peerlytics-backend:ci .
+
   collab:
     # Step 2.2 live-editing server. Not yet a required check; add it to scripts/setup-github.sh to make it one.
     name: collab (lint, test)
