@@ -38,7 +38,7 @@ const server = app.listen(PORT, () => {
   // (with a one-line log) unless FIREBASE_SERVICE_ACCOUNT + SMTP creds are configured.
   startDeadlineReminders();
   // Every minute: submit and lock workspaces past their deadline (dormant without the Admin SDK key).
-  startServerDeadlines();
+  startServerDeadlines({ pool: db.pool });
 });
 
 server.on('error', (err) => {
