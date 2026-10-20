@@ -30,6 +30,17 @@ const schema = z.object({
       .optional()
   ),
   DATABASE_POOL_MAX: z.preprocess(emptyAsUndefined, z.coerce.number().int().min(1).max(100).default(10)),
+  // OpenAI (step 2.4). Used only when both the key and the model are set; otherwise analysis
+  // uses the legacy providers (Hugging Face + Virtual Writing Tutor).
+  OPENAI_API_KEY: optionalString,
+  OPENAI_MODEL: optionalString,
+  OPENAI_BASE_URL: z.preprocess(emptyAsUndefined, z.string().url().default('https://api.openai.com/v1')),
+  OPENAI_TIMEOUT_MS: z.preprocess(emptyAsUndefined, z.coerce.number().int().min(1000).max(300_000).default(30_000)),
+  OPENAI_MAX_INPUT_CHARS: z.preprocess(emptyAsUndefined, z.coerce.number().int().min(1000).max(1_000_000).default(60_000)),
+  // USD per million tokens for OPENAI_MODEL, from OpenAI's price list. Used for the usage
+  // table's cost estimate and the college budget check; 0 means "unknown, count as free".
+  OPENAI_PRICE_INPUT_PER_1M: z.preprocess(emptyAsUndefined, z.coerce.number().min(0).default(0)),
+  OPENAI_PRICE_OUTPUT_PER_1M: z.preprocess(emptyAsUndefined, z.coerce.number().min(0).default(0)),
 });
 
 /**
@@ -49,6 +60,15 @@ export function loadConfig(env = process.env) {
     corsOrigin: e.CORS_ORIGIN ?? true,
     databaseUrl: e.DATABASE_URL ?? null,
     databasePoolMax: e.DATABASE_POOL_MAX,
+    openai: Object.freeze({
+      apiKey: e.OPENAI_API_KEY ?? null,
+      model: e.OPENAI_MODEL ?? null,
+      baseUrl: e.OPENAI_BASE_URL.replace(/\/+$/, ''),
+      timeoutMs: e.OPENAI_TIMEOUT_MS,
+      maxInputChars: e.OPENAI_MAX_INPUT_CHARS,
+      priceInputPer1M: e.OPENAI_PRICE_INPUT_PER_1M,
+      priceOutputPer1M: e.OPENAI_PRICE_OUTPUT_PER_1M,
+    }),
   });
 }
 

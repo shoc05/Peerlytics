@@ -269,7 +269,7 @@ One per workspace. Created by a member's submit or by the deadline job. From thi
 | provider | text | NOT NULL | `CHECK (provider IN ('openai','legacy'))`. `legacy` = Hugging Face + Virtual Writing Tutor |
 | model | text | NULL | e.g. the OpenAI model name. NULL for legacy |
 | status | text | NOT NULL | `CHECK (status IN ('completed','partial','unavailable'))`. `unavailable` keeps the "submission never fails" rule: the row records why |
-| fallback_reason | text | NULL | Why the main provider wasn't used: `openai_error`, `openai_timeout`, `budget_reached`, `flag_legacy` |
+| fallback_reason | text | NULL | Why the main provider wasn't used: `openai_error`, `openai_timeout`, `openai_invalid_output` (the reply failed the schema), `openai_not_configured` (no key or model), `budget_reached` (also when licensing is on and the college has no current licence), `flag_legacy` (the `ai_provider` flag or a lecturer's re-run chose legacy). The last two values were added by migration `1792368000002` |
 | ai_likelihood | smallint | NULL | 0–100. A signal, not proof |
 | flagged_sentences | jsonb | NOT NULL, '[]' | `[{ sentence, reason, authorId? }]`, up to 50 |
 | writing_quality | numeric(4,2) | NULL | 0–10 |
