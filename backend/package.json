@@ -8,7 +8,7 @@
     "dev": "node --watch server.js",
     "lint": "eslint . --ext .js",
     "test": "node --test app.test.js \"config/**/*.test.js\" \"services/**/*.test.js\" \"src/**/*.test.js\"",
-    "test:db": "node --test --test-concurrency=1 \"db/**/*.itest.js\"",
+    "test:db": "node --test --test-concurrency=1 \"db/**/*.itest.js\" \"src/**/*.pg.itest.js\"",
     "test:mail": "node scripts/test-mail.js",
     "migrate": "node-pg-migrate --migrations-dir db/migrations --migrations-table pgmigrations --envPath ../.env",
     "migrate:up": "npm run migrate -- up",
