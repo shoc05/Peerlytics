@@ -1,0 +1,34 @@
+---
+# Peerlytics server (step 3.3): a fresh Ubuntu 22.04/24.04 VPS ->
+#   updates, a deploy user with SSH keys only, no password or root login, fail2ban,
+#   a firewall with only 22/80/443 open, Docker, k3s, and the staging, production and
+#   monitoring namespaces.
+# Safe to run again: every task checks before it changes anything.
+#
+#   ansible-galaxy collection install -r requirements.yml
+#   ansible-playbook site.yml -u root -e deploy_ssh_public_key_file=~/.ssh/id_ed25519.pub
+#
+# See README.md for the first run and how to check the result.
+
+- name: Prepare a Peerlytics server
+  hosts: peerlytics
+  become: true
+  pre_tasks:
+    - name: Check the settings this playbook needs
+      ansible.builtin.assert:
+        that:
+          - deploy_ssh_public_key_file is defined
+          - ansible_facts['distribution'] == 'Ubuntu'
+          - ansible_facts['distribution_major_version'] | int >= 22
+        fail_msg: >-
+          Pass -e deploy_ssh_public_key_file=<path to your .pub key>, and run against Ubuntu 22.04 or newer.
+        quiet: true
+
+  roles:
+    - base
+    - users
+    - ssh
+    - fail2ban
+    - firewall
+    - docker
+    - k3s

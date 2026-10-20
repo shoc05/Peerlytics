@@ -1,0 +1,31 @@
+---
+# ufw: everything incoming is blocked except the public ports; outgoing is allowed.
+# SSH is allowed before the firewall is switched on, so the current session survives.
+- name: Allow the public ports (SSH is rate-limited)
+  community.general.ufw:
+    rule: "{{ 'limit' if item == 22 else 'allow' }}"
+    port: "{{ item | string }}"
+    proto: tcp
+  loop: "{{ firewall_public_tcp_ports }}"
+
+- name: Allow k3s pod and service traffic (internal networks only)
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ item }}"
+  loop:
+    - "{{ k3s_cluster_cidr }}"
+    - "{{ k3s_service_cidr }}"
+
+- name: Block everything else coming in
+  community.general.ufw:
+    default: deny
+    direction: incoming
+
+- name: Allow outgoing traffic
+  community.general.ufw:
+    default: allow
+    direction: outgoing
+
+- name: Switch the firewall on
+  community.general.ufw:
+    state: enabled

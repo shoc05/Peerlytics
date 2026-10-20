@@ -1,0 +1,25 @@
+---
+# Settings for site.yml. Nothing secret lives here: the SSH public key is read from a file on
+# the machine running Ansible (deploy_ssh_public_key_file), and app secrets go into Kubernetes
+# Secrets later (step 4.1), never into this repository.
+
+deploy_user: deploy
+# Required. Path to the public key (.pub) that may log in as deploy_user.
+# deploy_ssh_public_key_file: ~/.ssh/id_ed25519.pub
+
+server_timezone: Asia/Thimphu
+
+# Only these ports are open to the internet.
+firewall_public_tcp_ports: [22, 80, 443]
+# k3s pod and service networks. Pods talk to each other and to services over these;
+# they never face the internet.
+k3s_cluster_cidr: 10.42.0.0/16
+k3s_service_cidr: 10.43.0.0/16
+
+fail2ban_maxretry: 5
+fail2ban_findtime: 10m
+fail2ban_bantime: 1h
+
+# Pinned so a re-run on a fresh server installs exactly the same cluster.
+k3s_version: v1.31.4+k3s1
+k3s_namespaces: [staging, production, monitoring]

@@ -1,0 +1,32 @@
+---
+# Lock-out protection: only switch off password and root login once the deploy user can
+# log in with a key.
+- name: Read the deploy user's authorized keys
+  ansible.builtin.slurp:
+    src: "/home/{{ deploy_user }}/.ssh/authorized_keys"
+  register: ssh_deploy_keys
+
+- name: Stop if the deploy user has no SSH key
+  ansible.builtin.assert:
+    that: (ssh_deploy_keys.content | b64decode | trim | length) > 0
+    fail_msg: The deploy user has no authorized key; refusing to turn off password and root login.
+    quiet: true
+
+# Ubuntu reads /etc/ssh/sshd_config.d/*.conf in order and the first value wins, so "00-" beats
+# cloud-init's 50-cloud-init.conf (which can turn passwords back on).
+- name: SSH keys only, no root login, only the deploy user
+  ansible.builtin.template:
+    src: 00-peerlytics.conf.j2
+    dest: /etc/ssh/sshd_config.d/00-peerlytics.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Check and restart SSH
+
+- name: Make sure sshd reads the drop-in folder
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^Include /etc/ssh/sshd_config\.d/\*\.conf'
+    line: Include /etc/ssh/sshd_config.d/*.conf
+    insertbefore: BOF
+  notify: Check and restart SSH

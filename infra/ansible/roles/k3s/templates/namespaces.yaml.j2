@@ -1,0 +1,11 @@
+# Managed by Ansible (infra/ansible/roles/k3s).
+{% for ns in k3s_namespaces %}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ ns }}
+  labels:
+    app.kubernetes.io/part-of: peerlytics
+    peerlytics/environment: {{ ns }}
+{% endfor %}
