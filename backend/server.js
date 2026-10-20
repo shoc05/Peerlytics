@@ -7,17 +7,10 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 const __dirnameSrv = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirnameSrv, '..', '.env') });
-import express from 'express';
-import cors from 'cors';
-import checkRouter from './routes/check.js';
-import analyzeRouter from './routes/analyze.js';
-import { createAuthRouter } from './src/auth/routes.js';
+import { createApp } from './src/app.js';
 import { startDeadlineReminders } from './services/reminderService.js';
 import { startServerDeadlines } from './src/jobs/deadlines/index.js';
-import { createExtensionRouter } from './src/jobs/deadlines/extensions.js';
-import { createMetrics } from './src/metrics/index.js';
 
-const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ── Startup config validation: warn clearly if analysis API keys are missing or
@@ -42,45 +35,7 @@ function validateConfig() {
 }
 validateConfig();
 
-app.set('trust proxy', 1); // correct req.ip behind Render/hosting proxies (for rate limiting)
-// Prometheus: count and time every request; GET /metrics for the cluster (step 5.3).
-const metrics = createMetrics();
-app.use(metrics.middleware);
-app.use(metrics.router());
-app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
-app.use(express.json({ limit: '2mb' }));
-
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, name: 'Peerlytics API', version: '1.0.0' });
-});
-
-// ── Lightweight in-memory rate limiter for the analysis endpoints. Protects the
-// external-API quotas (Hugging Face/VWT) from accidental bursts. No extra dependency.
-// Per-IP sliding window; resets each window. For multi-instance scale, swap for Redis.
-function rateLimit({ windowMs = 60_000, max = 20 } = {}) {
-  const hits = new Map();
-  setInterval(() => hits.clear(), windowMs).unref?.();
-  return (req, res, next) => {
-    const key = req.ip || req.headers['x-forwarded-for'] || 'anon';
-    const n = (hits.get(key) || 0) + 1;
-    hits.set(key, n);
-    if (n > max) {
-      return res.status(429).json({ error: 'Too many analysis requests — please wait a moment and retry.' });
-    }
-    next();
-  };
-}
-const analysisLimiter = rateLimit({ windowMs: 60_000, max: 20 });
-
-app.use('/api/check', analysisLimiter, checkRouter);
-app.use('/api/analyze', analysisLimiter, analyzeRouter);
-app.use('/api', createAuthRouter());
-app.use('/api', createExtensionRouter());
-
-app.use((err, _req, res, _next) => {
-  console.error(err);
-  res.status(500).json({ error: 'Internal server error' });
-});
+const app = createApp();
 
 const server = app.listen(PORT, () => {
   console.log(`Peerlytics API listening on http://localhost:${PORT}`);

@@ -10,7 +10,7 @@ const router = Router();
  * Runs Hugging Face (AI detection) + Virtual Writing Tutor (grammar/writing) in parallel
  * and returns the combined format. Never throws on a single provider failure.
  */
-router.post('/', async (req, res) => {
+router.post('/', async (req, res, next) => {
   try {
     const text = String(req.body?.text || '').trim();
     if (text.length < 10) {
@@ -40,8 +40,7 @@ router.post('/', async (req, res) => {
       }),
     });
   } catch (err) {
-    console.error('[analyze]', err);
-    res.status(500).json({ error: 'Analysis failed', message: err.message });
+    return next(err);
   }
 });
 

@@ -6,6 +6,7 @@ import { getFlag } from '../src/flags/index.js';
 import { reportTabs } from '../src/tabs/reportTabs.js';
 
 const router = Router();
+const CONTENT_TOO_SHORT_MESSAGE = 'Content too short for analysis (min 10 characters).';
 
 /**
  * POST /api/check — submission analysis used by the Peerlytics submission flow.
@@ -14,13 +15,14 @@ const router = Router();
  * the submission's paste events (real signal; EyeSift was removed). The report shape
  * is unchanged so the existing lecturer UI (AI Report / Analysis / Grading) keeps working.
  */
-router.post('/', async (req, res) => {
+router.post('/', async (req, res, next) => {
   try {
     res.json(await analyzeSubmission(req.body || {}));
   } catch (err) {
-    if (err.status === 400) return res.status(400).json({ error: err.message });
-    console.error('[check]', err);
-    res.status(500).json({ error: 'Submission check failed', message: err.message });
+    if (err.code === 'CONTENT_TOO_SHORT') {
+      return res.status(400).json({ error: CONTENT_TOO_SHORT_MESSAGE });
+    }
+    return next(err);
   }
 });
 
@@ -45,7 +47,7 @@ export async function analyzeSubmission(body) {
     const plainText = (text || '').trim() || stripHtml(html || '');
 
     if (plainText.length < 10) {
-      throw Object.assign(new Error('Content too short for analysis (min 10 characters).'), { status: 400 });
+      throw Object.assign(new Error(CONTENT_TOO_SHORT_MESSAGE), { status: 400, code: 'CONTENT_TOO_SHORT' });
     }
 
     // Both providers run simultaneously; neither failing blocks the submission.
