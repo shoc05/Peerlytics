@@ -6,6 +6,7 @@ import { getFlag } from '../src/flags/index.js';
 import { reportTabs } from '../src/tabs/reportTabs.js';
 
 const router = Router();
+const CONTENT_TOO_SHORT_MESSAGE = 'Content too short for analysis (min 10 characters).';
 
 /**
  * POST /api/check — submission analysis used by the Peerlytics submission flow.
@@ -14,7 +15,7 @@ const router = Router();
  * the submission's paste events (real signal; EyeSift was removed). The report shape
  * is unchanged so the existing lecturer UI (AI Report / Analysis / Grading) keeps working.
  */
-router.post('/', async (req, res) => {
+router.post('/', async (req, res, next) => {
   try {
     res.json(await analyzeSubmission(req.body || {}));
   } catch (err) {
