@@ -12,7 +12,8 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "lint": "eslint .",
-    "test": "node --test \"src/**/*.test.js\""
+    "test": "node --test \"src/**/*.test.js\"",
+    "test:coverage": "node -e \"require('fs').mkdirSync('coverage', { recursive: true })\" && node --test --experimental-test-coverage --test-coverage-exclude=\"**/*.test.js\" --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=coverage/junit.xml --test-reporter=lcov --test-reporter-destination=coverage/lcov.info \"src/**/*.test.js\""
   },
   "dependencies": {
     "@hocuspocus/server": "^2.15.3",

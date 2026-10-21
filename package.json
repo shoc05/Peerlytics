@@ -10,7 +10,8 @@
     "prepare": "git config core.hooksPath .githooks",
     "dev:server": "node backend/server.js",
     "lint": "eslint src --ext .js,.jsx",
-    "test": "node --test src/**/*.test.js .github/scripts/*.test.cjs",
+    "test": "node --test \"src/**/*.test.js\" \".github/scripts/*.test.cjs\"",
+    "test:coverage": "node -e \"require('fs').mkdirSync('coverage', { recursive: true })\" && node --test --experimental-test-coverage --test-coverage-exclude=\"**/*.test.js\" --test-coverage-exclude=\".github/scripts/*.test.cjs\" --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=coverage/junit.xml --test-reporter=lcov --test-reporter-destination=coverage/lcov.info \"src/**/*.test.js\" \".github/scripts/*.test.cjs\"",
     "test:rules": "firebase emulators:exec --only firestore --project demo-peerlytics \"node --test test/firestore.rules.test.js\"",
     "test:auth": "firebase emulators:exec --only auth,firestore --project demo-peerlytics \"node --test backend/src/auth/auth.emulator.itest.js\"",
     "test:deadlines": "firebase emulators:exec --only firestore --project demo-peerlytics \"node --test backend/src/jobs/deadlines/deadlines.emulator.itest.js\""

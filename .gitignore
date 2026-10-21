@@ -20,6 +20,10 @@ backend/serviceAccountKey.json
 *.log
 npm-debug.log*
 
+# Test reports: npm run test:coverage writes coverage/ in each package; CI also writes test-results/
+coverage/
+test-results/
+
 # Editor / OS
 .vscode/
 .idea/
