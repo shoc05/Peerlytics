@@ -1,41 +1,36 @@
-// Load env from the project ROOT .env regardless of the cwd the server is launched from.
-// (The .env lives one level up from /backend; loading the bare 'dotenv/config' only finds it
-// when started from root, which silently dropped HF_API_KEY/VWT_API_KEY when run from /backend
-// and made AI/writing analysis intermittently show "unavailable".)
-import path from 'path';
-import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
-const __dirnameSrv = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirnameSrv, '..', '.env') });
-import { createApp } from './src/app.js';
-import { startDeadlineReminders } from './services/reminderService.js';
-import { startServerDeadlines } from './src/jobs/deadlines/index.js';
+// Entry point: load settings, connect to PostgreSQL, start the app and the background jobs.
+// The routes themselves are in app.js.
+import { loadDotenv, loadConfig, missingProviderKeys } from './config/index.js';
+// Before anything reads process.env, so it works from any working directory.
+loadDotenv();
 
-const PORT = process.env.PORT || 5000;
+const { createApp } = await import('./app.js');
+const { createDb } = await import('./db/pool.js');
+const { startDeadlineReminders } = await import('./services/reminderService.js');
+const { startServerDeadlines } = await import('./src/jobs/deadlines/index.js');
+
+const config = loadConfig();
 
 // ── Startup config validation: warn clearly if analysis API keys are missing or
 // look like unreplaced placeholders, so failures aren't silent. The server still starts —
 // analysis falls back gracefully ("AI checker not available") on any provider error.
-function validateConfig() {
-  const placeholder = (v) => !v || /your_.*_key_here|YOUR_.*_KEY/i.test(v);
-  const checks = [
-    ['HF_API_KEY', 'Hugging Face AI detection'],
-    ['VWT_API_KEY', 'Virtual Writing Tutor grammar/writing'],
-  ];
-  const missing = checks.filter(([k]) => placeholder(process.env[k]));
-  if (missing.length) {
-    console.warn('⚠ Analysis API keys not configured:');
-    for (const [k, label] of missing) {
-      console.warn(`  • ${k} (${label}) is missing or a placeholder — that provider will show "unavailable".`);
-    }
-    console.warn('  Submissions still work; affected scores are hidden with a notice.');
-  } else {
-    console.log('✓ Analysis API keys present (Hugging Face + VWT).');
+const missing = missingProviderKeys();
+if (missing.length) {
+  console.warn('⚠ Analysis API keys not configured:');
+  for (const [k, label] of missing) {
+    console.warn(`  • ${k} (${label}) is missing or a placeholder — that provider will show "unavailable".`);
   }
+  console.warn('  Submissions still work; affected scores are hidden with a notice.');
+} else {
+  console.log('✓ Analysis API keys present (Hugging Face + VWT).');
 }
-validateConfig();
+if (!config.databaseUrl) {
+  console.warn('⚠ DATABASE_URL is not set: PostgreSQL features are off and /api/health leaves out "db".');
+}
 
-const app = createApp();
+const db = createDb({ databaseUrl: config.databaseUrl, max: config.databasePoolMax });
+const app = createApp({ config, db });
+const PORT = config.port;
 
 const server = app.listen(PORT, () => {
   console.log(`Peerlytics API listening on http://localhost:${PORT}`);
@@ -43,7 +38,7 @@ const server = app.listen(PORT, () => {
   // (with a one-line log) unless FIREBASE_SERVICE_ACCOUNT + SMTP creds are configured.
   startDeadlineReminders();
   // Every minute: submit and lock workspaces past their deadline (dormant without the Admin SDK key).
-  startServerDeadlines();
+  startServerDeadlines({ pool: db.pool });
 });
 
 server.on('error', (err) => {
@@ -58,3 +53,11 @@ server.on('error', (err) => {
   }
   throw err;
 });
+
+// docker stop / Kubernetes send SIGTERM: finish open requests, close the pool, then exit.
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.once(signal, () => {
+    server.close(() => db.close().finally(() => process.exit(0)));
+    setTimeout(() => process.exit(0), 10_000).unref();
+  });
+}

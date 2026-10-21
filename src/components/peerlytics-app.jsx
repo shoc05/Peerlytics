@@ -52,8 +52,6 @@ import { logOut } from '../firebase/authService';
 import { createActivityEntry, formatRelativeTime, formatDuration, formatDate, formatDateTime } from '../utils/workspaceHelpers';
 import { effectiveDeadline, isExtended } from '../deadlines/effectiveDeadline';
 import ExtensionForm from '../deadlines/ExtensionForm';
-import { courseApi } from '../api';
-import { isCourseApiReady } from '../courses/courseApi';
 
 // ─── Sidebar nav icons (small inline SVGs, currentColor) ───
 const Svg = (props) => (
