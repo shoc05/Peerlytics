@@ -1,6 +1,6 @@
 # Deploying Peerlytics
 
-Step 1.9 (staging). Pipeline diagram: [diagrams/cd-pipeline.md](diagrams/cd-pipeline.md).
+Steps 1.9 (staging) and 5.1 (production). Pipeline diagram: [diagrams/cd-pipeline.md](diagrams/cd-pipeline.md).
 
 Everything runs on one Oracle Cloud Always Free Ubuntu ARM (aarch64) server, with Docker and Compose:
 
@@ -36,7 +36,9 @@ Everything lives in `/opt/peerlytics`, owned by `deploy`. Names only; the values
 | `edge.env` | you | `STAGING_DOMAIN`, `PROD_DOMAIN`, `ACME_EMAIL` |
 | `.env.staging`, `.env.prod` | you | `POSTGRES_PASSWORD` (letters and digits only), optional `POSTGRES_DB`/`POSTGRES_USER`; `CORS_ORIGIN` (staging: `https://<owner>.github.io`, prod: the Firebase site's origin); `FIREBASE_SERVICE_ACCOUNT` (the JSON on one line, in single quotes); `HF_API_KEY`, `HF_AI_MODEL`, `VWT_API_KEY`; `SMTP_*`, `REMINDER_*`; `DEADLINE_TIMEZONE`; `METRICS_TOKEN`; optional `NOTIFIER_ENABLED=true` |
 | `infra/` | each deploy | Copy of the repo's `infra/compose`, `infra/edge` and `infra/scripts` from the commit being deployed |
-| `edge/upstreams/` | deploy.sh | Production's live backend colour (step 5.1) |
+| `edge/upstreams/prod-backend.caddy` | deploy.sh, rollback.sh | The `reverse_proxy` line for production's live backend colour |
+| `.active_color-prod`, `.color_tag-prod-blue`, `.color_tag-prod-green` | deploy.sh, rollback.sh | Which colour is live, and the tag each colour runs |
+| `.image_prefix-staging`, `.image_prefix-prod` | deploy.sh | The registry prefix, for rollback.sh |
 | `.last_good_tag-staging`, `.last_good_tag-prod` | deploy.sh | Last tag that deployed healthy |
 | `.deploy.lock` | deploy.sh | Makes sure only one deploy runs at a time |
 
@@ -56,7 +58,18 @@ Everything lives in `/opt/peerlytics`, owned by `deploy`. Names only; the values
 | Secret | `SSH_KNOWN_HOSTS` | Output of `ssh-keyscan -t ed25519 <server>`. Check its fingerprint against the server's own `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` |
 | Variable | `STAGING_DOMAIN` | e.g. `peerlytics-staging.duckdns.org` |
 
-**Repository variables** (the website build isn't in an environment):
+**Environment `production`:** the same four `SSH_*` secrets (same server), and:
+
+| Kind | Name | Value |
+|---|---|---|
+| Secret | `FIREBASE_SERVICE_ACCOUNT_PEERLYTICS_4367C` | JSON key of a service account with the **Firebase Hosting Admin** role in `peerlytics-4367c` (`firebase init hosting:github` creates one under this name) |
+| Variable | `PROD_DOMAIN` | e.g. `peerlytics.duckdns.org` |
+| Variable | `VITE_API_URL_PROD` | `https://<PROD_DOMAIN>` |
+| Variable | `VITE_COLLAB_URL_PROD` | `wss://<PROD_DOMAIN>/collab` (empty keeps live editing off) |
+
+The production environment already has **required reviewers**, so a release waits for one of them to approve it. Public repositories get environment protection on every plan, so no extra approval gate is needed. Also set **Deployment branches and tags** to the tag pattern `v*.*.*`, so only version tags can use the environment's secrets.
+
+**Repository variables** (the staging website build isn't in an environment; the production build reads the Firebase ones too):
 
 | Name | Value |
 |---|---|
@@ -68,7 +81,9 @@ Everything lives in `/opt/peerlytics`, owned by `deploy`. Names only; the values
 
 ## 4. Firebase authorized domains
 
-In the Firebase console, open **Authentication → Settings → Authorized domains** and add `<owner>.github.io`. Without it, sign-in on the staging website fails with `auth/unauthorized-domain`.
+In the Firebase console, open **Authentication → Settings → Authorized domains** and add `<owner>.github.io`. Without it, sign-in on the staging website fails with `auth/unauthorized-domain`. The production site (`peerlytics-4367c.web.app` and `.firebaseapp.com`) is on the list by default. Add any custom domain you put in front of it.
+
+In `.env.prod`, `CORS_ORIGIN` must be the production site's origin, e.g. `https://peerlytics-4367c.web.app`.
 
 ## 5. How a staging deploy runs
 
@@ -99,7 +114,45 @@ There's no OWASP ZAP job in the repo yet. When one exists, its baseline scan goe
 
 Migrations only go forward. A rollback runs the older code against the newer schema, so keep migrations backwards-compatible (add columns; drop them in a later release).
 
-## 7. Common errors
+## 7. Release to production
+
+1. Merge develop into main through a PR. CI runs on the push to main.
+2. Tag the merge commit and push the tag:
+   ```bash
+   git checkout main && git pull
+   git tag v1.2.0 && git push origin v1.2.0
+   ```
+3. **CD production** (`cd-production.yml`):
+   1. `verify-ci` asks the GitHub API for a successful CI run on the tagged commit, and stops if there isn't one;
+   2. builds the images tagged `v1.2.0`;
+   3. waits for a reviewer to approve the `production` deployment (Actions → the run → Review deployments);
+   4. runs `deploy.sh prod v1.2.0`. After the migrations, the backend goes **blue/green**:
+      - the new tag starts in the idle colour (say `backend_green`) with `RUN_JOBS=false`, and must become healthy;
+      - green is restarted with the reminder emails and the deadline lock on (`RUN_JOBS=true`), and must be healthy again;
+      - Caddy checks that it can reach `prod-backend-green`. `prod-backend.caddy` is rewritten and Caddy reloads, with no dropped requests;
+      - blue is restarted with the jobs off. Both colours run the jobs for those few seconds;
+      - **blue keeps running** the previous release;
+      - then collab and notifier update one at a time, as on staging;
+   5. checks `https://<PROD_DOMAIN>/api/health`, then builds the website with `VITE_API_URL_PROD` and deploys it to Firebase Hosting (live);
+   6. creates a GitHub release with generated notes.
+
+Nothing on main deploys by itself. Production changes only when a tag is pushed.
+
+## 8. Roll back production
+
+**The API, in seconds:** switch back to the colour that's still running the previous release:
+```bash
+ssh deploy@<server> /opt/peerlytics/infra/scripts/rollback.sh prod
+```
+Running it again switches forward. It doesn't touch collab, notifier or the website.
+
+**Everything at an older version:** on the server, with a GHCR login (a personal token with `read:packages`):
+```bash
+IMAGE_PREFIX=ghcr.io/<owner>/peerlytics /opt/peerlytics/infra/scripts/deploy.sh prod v1.1.0
+```
+For the website, use Firebase console → Hosting → release history → **Rollback**.
+
+## 9. Common errors
 
 | Symptom | Cause and fix |
 |---|---|
@@ -113,4 +166,8 @@ Migrations only go forward. A rollback runs the older code against the newer sch
 | Staging website is blank, or 404 on assets | Pages Source isn't "GitHub Actions", or the repo was renamed. The base comes from the repo name |
 | `auth/unauthorized-domain` | Section 4 |
 | CD staging never starts | The workflow isn't on main yet (section 5), or CI failed or ran for a PR rather than a push |
+| CD production: `No successful CI run for <sha>` | The tag points at a commit CI never passed on (for example, tagged locally before the merge). Tag the merge commit on main |
+| Production deploy waits forever | Nobody has approved it yet: Actions → the run → Review deployments |
+| `rollback.sh`: `backend_<colour> has never run` | Only one production release so far. There's nothing to switch back to |
+| Firebase step: `HTTP Error: 403` | The Hosting service account lacks the Firebase Hosting Admin role, or the secret holds another project's key |
 | `another deploy is still running` | A deploy holds `.deploy.lock`. Wait, or check for a stuck `deploy.sh` with `ps` |
