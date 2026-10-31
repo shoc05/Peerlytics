@@ -1,0 +1,15 @@
+---
+# Handlers run in the order written: sshd -t checks the whole configuration first, so a broken
+# file stops the play here instead of restarting SSH into a state nobody can log in to.
+# They run at the end of the play, after every other role, and a restart keeps open sessions.
+- name: Check the SSH configuration
+  listen: Check and restart SSH
+  ansible.builtin.command:
+    cmd: /usr/sbin/sshd -t
+  changed_when: false
+
+- name: Restart SSH
+  listen: Check and restart SSH
+  ansible.builtin.service:
+    name: ssh
+    state: restarted

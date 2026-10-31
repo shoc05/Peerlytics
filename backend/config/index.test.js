@@ -10,6 +10,14 @@ describe('loadConfig', () => {
     assert.equal(c.databaseUrl, null);
     assert.equal(c.databasePoolMax, 10);
     assert.equal(c.env, 'development');
+    assert.equal(c.runJobs, true);
+  });
+
+  test('RUN_JOBS=false turns the background jobs off; other values are rejected', () => {
+    assert.equal(loadConfig({ RUN_JOBS: 'false' }).runJobs, false);
+    assert.equal(loadConfig({ RUN_JOBS: 'true' }).runJobs, true);
+    assert.equal(loadConfig({ RUN_JOBS: '' }).runJobs, true);
+    assert.throws(() => loadConfig({ RUN_JOBS: 'no' }), /RUN_JOBS/);
   });
 
   test('empty strings from .env count as unset', () => {

@@ -16,7 +16,7 @@ export default function App() {
       <FirebaseGate>
       <FlagsProvider>
       <AuthProvider>
-        <BrowserRouter>
+        <BrowserRouter basename={import.meta.env.BASE_URL}>
           <Routes>
             <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
             <Route path="/signup" element={<GuestRoute><Signup /></GuestRoute>} />

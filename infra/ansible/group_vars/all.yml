@@ -1,0 +1,22 @@
+---
+# Settings for site.yml. Nothing secret lives here: the SSH public key is read from a file on
+# the machine running Ansible (deploy_ssh_public_key_file), and the app's env files are written
+# on the server by hand (docs/deploy.md), never into this repository.
+
+deploy_user: deploy
+# Required. Path to the public key (.pub) that may log in as deploy_user.
+# deploy_ssh_public_key_file: ~/.ssh/id_ed25519.pub
+
+server_timezone: Asia/Thimphu
+
+# Only these ports are open to the internet.
+firewall_public_tcp_ports: [22, 80, 443]
+
+fail2ban_maxretry: 5
+fail2ban_findtime: 10m
+fail2ban_bantime: 1h
+
+# Where deploy.sh keeps the compose files, env files and deploy state (docs/deploy.md).
+peerlytics_root: /opt/peerlytics
+# External Docker network shared by Caddy (infra/edge) and the app projects (infra/compose).
+edge_network: edge
