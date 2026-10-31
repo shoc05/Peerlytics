@@ -34,6 +34,10 @@ const PORT = config.port;
 
 const server = app.listen(PORT, () => {
   console.log(`Peerlytics API listening on http://localhost:${PORT}`);
+  if (!config.runJobs) {
+    console.log('RUN_JOBS=false: reminder emails and the deadline lock are off in this process.');
+    return;
+  }
   // Optional: scheduled deadline-reminder emails for offline members. Stays dormant
   // (with a one-line log) unless FIREBASE_SERVICE_ACCOUNT + SMTP creds are configured.
   startDeadlineReminders();

@@ -1,0 +1,7 @@
+---
+# Install with: ansible-galaxy collection install -r requirements.yml
+collections:
+  - name: ansible.posix
+    version: "1.6.2"
+  - name: community.general
+    version: "10.2.0"

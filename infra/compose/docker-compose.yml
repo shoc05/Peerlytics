@@ -1,0 +1,109 @@
+# Peerlytics on the Oracle server (step 1.9). One file for both environments; each one is its
+# own compose project with its own env file, database volume and private network:
+#   docker compose -p peerlytics-staging --env-file /opt/peerlytics/.env.staging -f docker-compose.yml ...
+#   docker compose -p peerlytics-prod    --env-file /opt/peerlytics/.env.prod    -f docker-compose.yml ...
+# infra/scripts/deploy.sh runs these commands; you rarely need them by hand (docs/deploy.md).
+#
+# Set by deploy.sh: DEPLOY_ENV (staging|prod), TAG (image tag), IMAGE_PREFIX (ghcr.io/<owner>/peerlytics).
+# From the env file: POSTGRES_PASSWORD and the app settings (.env.example lists every name).
+# No port is published. Caddy (infra/edge) reaches backend and collab over the external "edge"
+# network by the aliases <env>-backend and <env>-collab; PostgreSQL is only on the private network.
+
+x-app: &app
+  env_file:
+    - path: /opt/peerlytics/.env.${DEPLOY_ENV:?Set DEPLOY_ENV to staging or prod}
+      required: true
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+x-database-url: &database-url
+  DATABASE_URL: postgres://${POSTGRES_USER:-peerlytics}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the env file}@postgres:5432/${POSTGRES_DB:-peerlytics}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    # Only its own settings, not the whole app env file.
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-peerlytics}
+      POSTGRES_USER: ${POSTGRES_USER:-peerlytics}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the env file}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [default]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  backend:
+    <<: *app
+    image: ${IMAGE_PREFIX:?Set IMAGE_PREFIX}-backend:${TAG:?Set TAG}
+    environment:
+      <<: *database-url
+      NODE_ENV: production
+      PORT: "5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      default: {}
+      edge:
+        aliases: ["${DEPLOY_ENV}-backend"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/api/health > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      start_period: 20s
+      retries: 3
+    mem_limit: 512m
+
+  collab:
+    <<: *app
+    image: ${IMAGE_PREFIX}-collab:${TAG}
+    environment:
+      NODE_ENV: production
+      COLLAB_PORT: "1234"
+    networks:
+      default: {}
+      edge:
+        aliases: ["${DEPLOY_ENV}-collab"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:1234/health > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      start_period: 15s
+      retries: 3
+    mem_limit: 384m
+
+  # notifier/ doesn't exist yet; the reminder emails still run inside the backend. The service
+  # stays off until the env file sets NOTIFIER_ENABLED=true (deploy.sh then adds --profile
+  # notifier) and build-images.yml finds notifier/Dockerfile. Its HEALTHCHECK comes from the image.
+  notifier:
+    <<: *app
+    profiles: [notifier]
+    image: ${IMAGE_PREFIX}-notifier:${TAG}
+    environment:
+      <<: *database-url
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [default]
+    mem_limit: 256m
+
+volumes:
+  pgdata: {}
+
+networks:
+  default: {}
+  edge:
+    external: true
+    name: edge

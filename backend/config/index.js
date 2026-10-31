@@ -30,6 +30,9 @@ const schema = z.object({
       .optional()
   ),
   DATABASE_POOL_MAX: z.preprocess(emptyAsUndefined, z.coerce.number().int().min(1).max(100).default(10)),
+  // "false" keeps the reminder emails and the deadline lock off in this process. Production
+  // blue/green runs two backends at once; only the live colour runs the jobs.
+  RUN_JOBS: z.preprocess(emptyAsUndefined, z.enum(['true', 'false']).default('true')),
 });
 
 /**
@@ -49,6 +52,7 @@ export function loadConfig(env = process.env) {
     corsOrigin: e.CORS_ORIGIN ?? true,
     databaseUrl: e.DATABASE_URL ?? null,
     databasePoolMax: e.DATABASE_POOL_MAX,
+    runJobs: e.RUN_JOBS === 'true',
   });
 }
 

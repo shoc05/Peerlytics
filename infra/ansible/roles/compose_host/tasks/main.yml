@@ -1,0 +1,29 @@
+---
+# What infra/scripts/deploy.sh expects on the server (docs/deploy.md, "Files on the server").
+# The env files hold secrets, so they are written by hand, never by this playbook.
+- name: Create the Peerlytics folders
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ peerlytics_root }}", mode: "0750" }
+    - { path: "{{ peerlytics_root }}/infra", mode: "0750" }
+    - { path: "{{ peerlytics_root }}/edge", mode: "0750" }
+    # Caddy reads this folder; it holds no secrets.
+    - { path: "{{ peerlytics_root }}/edge/upstreams", mode: "0755" }
+
+- name: Check for the edge network
+  ansible.builtin.command:
+    cmd: docker network inspect {{ edge_network }}
+  register: compose_host_edge
+  changed_when: false
+  failed_when: false
+
+- name: Create the edge network
+  ansible.builtin.command:
+    cmd: docker network create {{ edge_network }}
+  changed_when: true
+  when: compose_host_edge.rc != 0

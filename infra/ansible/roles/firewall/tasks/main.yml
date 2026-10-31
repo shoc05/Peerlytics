@@ -1,0 +1,45 @@
+---
+# iptables, not ufw: Oracle's Ubuntu images ship their own rules in /etc/iptables/rules.v4 that
+# end INPUT with a REJECT, and ufw fights with them. The public ports are accepted ahead of that
+# REJECT, now and after a reboot. Docker adds its own chains at start-up; they are left alone,
+# so `netfilter-persistent save` is never run (it would freeze Docker's rules into the file).
+# Oracle Cloud also filters in the VCN: open 80 and 443 in the subnet's security list as well.
+- name: Install iptables-persistent
+  ansible.builtin.apt:
+    name:
+      - iptables
+      - iptables-persistent
+    state: present
+
+- name: Accept new connections on the public ports
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_port: "{{ item | string }}"
+    ctstate: [NEW]
+    jump: ACCEPT
+    action: insert
+    comment: peerlytics
+  loop: "{{ firewall_public_tcp_ports }}"
+
+- name: Read the saved rules
+  ansible.builtin.slurp:
+    src: /etc/iptables/rules.v4
+  register: firewall_saved_rules
+  failed_when: false
+
+# Oracle's file ends INPUT with "-A INPUT -j REJECT ..."; the ports go just above it.
+- name: Keep the public ports open after a reboot
+  ansible.builtin.lineinfile:
+    path: /etc/iptables/rules.v4
+    line: "-A INPUT -p tcp -m state --state NEW -m tcp --dport {{ item }} -j ACCEPT"
+    insertbefore: '^-A INPUT -j REJECT'
+  loop: "{{ firewall_public_tcp_ports }}"
+  when: >-
+    firewall_saved_rules.content is defined and
+    '-A INPUT -j REJECT' in (firewall_saved_rules.content | b64decode)
+
+- name: Load the saved rules at boot
+  ansible.builtin.service:
+    name: netfilter-persistent
+    enabled: true

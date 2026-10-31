@@ -1,0 +1,195 @@
+name: CD staging
+
+# Step 1.9: every push to develop that passes CI is built and deployed to the staging server.
+# workflow_dispatch redeploys an existing tag (rollback) or, without one, builds the chosen ref.
+# How it works and what to set up: docs/deploy.md.
+# Note: GitHub runs workflow_run workflows from the default branch, so this only fires once
+# the file is on main.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Image tag to deploy again (e.g. sha-1a2b3c4). Empty builds the selected branch.
+        required: false
+        type: string
+
+permissions: {}
+
+jobs:
+  prepare:
+    name: Decide what to deploy
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.what.outputs.sha }}
+      tag: ${{ steps.what.outputs.tag }}
+      build: ${{ steps.what.outputs.build }}
+    steps:
+      - id: what
+        env:
+          EVENT: ${{ github.event_name }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+          REF_SHA: ${{ github.sha }}
+        run: |
+          if [[ "$EVENT" == workflow_dispatch && -n "$DISPATCH_TAG" ]]; then
+            if [[ ! "$DISPATCH_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+              echo "::error::Not a valid image tag: $DISPATCH_TAG"
+              exit 1
+            fi
+            { echo "sha="; echo "tag=$DISPATCH_TAG"; echo "build=false"; } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          sha="$RUN_SHA"
+          [[ "$EVENT" == workflow_dispatch ]] && sha="$REF_SHA"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Unexpected commit: $sha"; exit 1; }
+          { echo "sha=$sha"; echo "tag=sha-${sha:0:7}"; echo "build=true"; } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build images
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build-images.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
+      tag: ${{ needs.prepare.outputs.tag }}
+
+  deploy:
+    name: Deploy to staging
+    needs: [prepare, build]
+    if: >-
+      always() && needs.prepare.result == 'success' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    environment:
+      name: staging
+      url: https://${{ vars.STAGING_DOMAIN }}/api/health
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+      DOMAIN: ${{ vars.STAGING_DOMAIN }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # The deploy scripts come from the commit being deployed (or the selected ref on a redeploy).
+          ref: ${{ needs.prepare.outputs.sha || github.sha }}
+          persist-credentials: false
+          sparse-checkout: infra
+
+      - name: Check the settings
+        run: |
+          missing=()
+          [[ -n "$SSH_HOST" ]] || missing+=(secret SSH_HOST)
+          [[ -n "$SSH_USER" ]] || missing+=(secret SSH_USER)
+          [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || missing+=(variable STAGING_DOMAIN)
+          if (( ${#missing[@]} )); then
+            echo "::error::Missing or invalid in the staging environment: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Set up SSH (strict host key checking)
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          (umask 077; printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key)
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host peerlytics
+            HostName $SSH_HOST
+            User $SSH_USER
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ServerAliveInterval 30
+          EOF
+          chmod 600 ~/.ssh/config ~/.ssh/known_hosts
+
+      - name: Copy the deploy files to the server
+        run: |
+          tar -C infra -czf - compose edge scripts \
+            | ssh peerlytics 'mkdir -p /opt/peerlytics/infra && tar -C /opt/peerlytics/infra -xzf -'
+
+      - name: Log the server in to GHCR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        # The token goes over stdin only; ACTOR is a GitHub login, expanded here on purpose.
+        run: |
+          # shellcheck disable=SC2029
+          printf '%s' "$GH_TOKEN" | ssh peerlytics "docker login ghcr.io -u '$ACTOR' --password-stdin"
+
+      - name: Run deploy.sh staging
+        env:
+          OWNER: ${{ github.repository_owner }}
+        # TAG was checked against the Docker tag pattern in "Decide what to deploy".
+        run: |
+          # shellcheck disable=SC2029
+          ssh peerlytics "IMAGE_PREFIX=ghcr.io/${OWNER,,}/peerlytics bash /opt/peerlytics/infra/scripts/deploy.sh staging '$TAG'"
+
+      - name: Log the server out of GHCR
+        if: always()
+        run: ssh peerlytics 'docker logout ghcr.io' || true
+
+      - name: Smoke test /api/health
+        run: |
+          for i in $(seq 1 20); do
+            if body="$(curl -fsS --max-time 10 "https://$DOMAIN/api/health")" && grep -q '"ok":true' <<<"$body"; then
+              echo "$body"
+              exit 0
+            fi
+            echo "Attempt $i: not healthy yet"
+            sleep 6
+          done
+          echo "::error::https://$DOMAIN/api/health did not answer ok"
+          exit 1
+
+      # No OWASP ZAP job exists in this repository yet; add the baseline scan here when one does.
+
+      - name: Job summary
+        if: always()
+        env:
+          SHA: ${{ needs.prepare.outputs.sha }}
+          MERGED_AT: ${{ github.event.workflow_run.head_commit.timestamp }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          since="n/a (manual run)"
+          if [[ -n "$MERGED_AT" ]]; then
+            since="$(( ($(date -u +%s) - $(date -u -d "$MERGED_AT" +%s)) / 60 )) min"
+          fi
+          {
+            echo "### Staging deploy: $JOB_STATUS"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Tag | \`$TAG\` |"
+            echo "| Commit | ${SHA:-n/a (redeploy of an existing tag)} |"
+            echo "| URL | https://$DOMAIN/api/health |"
+            echo "| Finished | $now |"
+            echo "| Since the merge | $since |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
