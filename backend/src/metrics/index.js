@@ -4,7 +4,8 @@
 // create a new time series each.
 //
 // /metrics is meant for Prometheus inside the cluster (the Ingress doesn't route it). If
-// METRICS_TOKEN is set, scrapes must send "Authorization: Bearer <token>".
+// METRICS_TOKEN is set, scrapes must send "Authorization: Bearer <token>", or "X-Metrics-Token:
+// <token>" where Authorization already carries a Firebase ID token (src/app.js).
 import express from 'express';
 import client from 'prom-client';
 
@@ -43,7 +44,8 @@ export function createMetrics({ service = 'peerlytics-backend', registry = new c
   function router({ token = process.env.METRICS_TOKEN } = {}) {
     const r = express.Router();
     r.get('/metrics', async (req, res) => {
-      if (token && req.get('authorization') !== `Bearer ${token}`) return res.status(401).end();
+      const sent = req.get('x-metrics-token') ?? req.get('authorization')?.match(/^Bearer (.+)$/)?.[1];
+      if (token && sent !== token) return res.status(401).end();
       res.set('Content-Type', registry.contentType);
       res.end(await registry.metrics());
     });

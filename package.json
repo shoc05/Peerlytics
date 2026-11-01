@@ -27,7 +27,7 @@
     "@tiptap/react": "^2.6.6",
     "@tiptap/starter-kit": "^2.6.6",
     "dompurify": "^3.4.17",
-    "firebase": "^11.0.0",
+    "firebase": "^11.10.0",
     "react": ">=16.8.0",
     "react-dom": ">=16.8.0",
     "react-router-dom": "^6.30.3",
