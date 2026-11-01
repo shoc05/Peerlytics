@@ -12,11 +12,11 @@ flowchart LR
   pages --> gp[GitHub Pages<br/>staging website]
 
   subgraph job[cd-staging.yml deploy job, environment staging]
-    ssh[ssh + strict host key<br/>copy infra/, docker login] --> deploy[deploy.sh staging tag]
+    ssh[DEPLOY_MODE ssh: GitHub runner, strict host key<br/>DEPLOY_MODE local: self-hosted runner on the server<br/>copy infra/, docker login] --> deploy[deploy.sh staging tag]
   end
   ghcr --> ssh
 
-  subgraph server[Azure Ubuntu VM, /opt/peerlytics]
+  subgraph server[Ubuntu server: cloud VM or WSL2 on a PC, /opt/peerlytics]
     deploy --> mig[Migrations]
     mig --> be[backend healthy?]
     be --> co[collab healthy?]
@@ -42,7 +42,7 @@ flowchart LR
   build --> approve{{environment production<br/>required reviewer}}
   approve --> deploy[deploy.sh prod v1.2.3]
 
-  subgraph server[Azure Ubuntu VM]
+  subgraph server[Ubuntu server: cloud VM or WSL2 on a PC]
     deploy --> mig[Migrations]
     mig --> idle[New tag on idle colour<br/>e.g. backend_green, jobs off]
     idle -- unhealthy --> rb[Redeploy last good tag<br/>exit 1]
