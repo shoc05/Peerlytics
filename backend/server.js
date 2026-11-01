@@ -17,28 +17,25 @@ import { startServerDeadlines } from './src/jobs/deadlines/index.js';
 import { createExtensionRouter } from './src/jobs/deadlines/extensions.js';
 import { createMetrics } from './src/metrics/index.js';
 
-const app = express();
-const PORT = process.env.PORT || 5000;
+const { createApp } = await import('./app.js');
+const { createDb } = await import('./db/pool.js');
+const { startDeadlineReminders } = await import('./services/reminderService.js');
+const { startServerDeadlines } = await import('./src/jobs/deadlines/index.js');
+
+const config = loadConfig();
 
 // ── Startup config validation: warn clearly if analysis API keys are missing or
 // look like unreplaced placeholders, so failures aren't silent. The server still starts —
 // analysis falls back gracefully ("AI checker not available") on any provider error.
-function validateConfig() {
-  const placeholder = (v) => !v || /your_.*_key_here|YOUR_.*_KEY/i.test(v);
-  const checks = [
-    ['HF_API_KEY', 'Hugging Face AI detection'],
-    ['VWT_API_KEY', 'Virtual Writing Tutor grammar/writing'],
-  ];
-  const missing = checks.filter(([k]) => placeholder(process.env[k]));
-  if (missing.length) {
-    console.warn('⚠ Analysis API keys not configured:');
-    for (const [k, label] of missing) {
-      console.warn(`  • ${k} (${label}) is missing or a placeholder — that provider will show "unavailable".`);
-    }
-    console.warn('  Submissions still work; affected scores are hidden with a notice.');
-  } else {
-    console.log('✓ Analysis API keys present (Hugging Face + VWT).');
+const missing = missingProviderKeys();
+if (missing.length) {
+  console.warn('⚠ Analysis API keys not configured:');
+  for (const [k, label] of missing) {
+    console.warn(`  • ${k} (${label}) is missing or a placeholder — that provider will show "unavailable".`);
   }
+  console.warn('  Submissions still work; affected scores are hidden with a notice.');
+} else {
+  console.log('✓ Analysis API keys present (Hugging Face + VWT).');
 }
 validateConfig();
 
@@ -70,7 +67,6 @@ function rateLimit({ windowMs = 60_000, max = 20 } = {}) {
     next();
   };
 }
-const analysisLimiter = rateLimit({ windowMs: 60_000, max: 20 });
 
 app.use('/api/check', analysisLimiter, checkRouter);
 app.use('/api/analyze', analysisLimiter, analyzeRouter);
@@ -84,6 +80,10 @@ app.use((err, _req, res, _next) => {
 
 const server = app.listen(PORT, () => {
   console.log(`Peerlytics API listening on http://localhost:${PORT}`);
+  if (!config.runJobs) {
+    console.log('RUN_JOBS=false: reminder emails and the deadline lock are off in this process.');
+    return;
+  }
   // Optional: scheduled deadline-reminder emails for offline members. Stays dormant
   // (with a one-line log) unless FIREBASE_SERVICE_ACCOUNT + SMTP creds are configured.
   startDeadlineReminders();
@@ -103,3 +103,11 @@ server.on('error', (err) => {
   }
   throw err;
 });
+
+// docker stop / Kubernetes send SIGTERM: finish open requests, close the pool, then exit.
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.once(signal, () => {
+    server.close(() => db.close().finally(() => process.exit(0)));
+    setTimeout(() => process.exit(0), 10_000).unref();
+  });
+}

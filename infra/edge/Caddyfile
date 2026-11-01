@@ -1,0 +1,50 @@
+# Peerlytics edge (step 1.9). The websites themselves are on GitHub Pages (staging) and Firebase
+# Hosting (production); these two domains serve only the API and the live-editing socket.
+#   /api/*    -> backend, path kept (the backend's routes start with /api)
+#   /collab*  -> collab, /collab stripped; Caddy passes WebSocket upgrades through by itself
+# Upstreams are aliases on the "edge" Docker network (infra/compose/docker-compose.yml).
+
+{
+	email {$ACME_EMAIL}
+}
+
+(common) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+	log {
+		output stdout
+		format console
+	}
+}
+
+{$STAGING_DOMAIN} {
+	import common
+	handle /api/* {
+		reverse_proxy staging-backend:5000
+	}
+	handle_path /collab* {
+		reverse_proxy staging-collab:1234
+	}
+	handle {
+		respond "Not found" 404
+	}
+}
+
+{$PROD_DOMAIN} {
+	import common
+	# Blue/green (step 5.1): the live colour's reverse_proxy line, written by infra/scripts/lib.sh.
+	handle /api/* {
+		import /etc/caddy-upstreams/prod-backend.caddy
+	}
+	handle_path /collab* {
+		reverse_proxy prod-collab:1234
+	}
+	handle {
+		respond "Not found" 404
+	}
+}

@@ -1,0 +1,101 @@
+name: Build images
+
+# Reusable (step 1.9): builds the linux/arm64 images for the Oracle server and pushes them to
+# GHCR as ghcr.io/<owner>/peerlytics-<service>:<tag>. Called by cd-staging.yml and
+# cd-production.yml. A service is built only if its Dockerfile exists, so notifier joins in
+# automatically once notifier/Dockerfile lands.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to build
+        required: true
+        type: string
+      tag:
+        description: Image tag, e.g. sha-1a2b3c4 or v1.2.3
+        required: true
+        type: string
+    outputs:
+      image_prefix:
+        description: ghcr.io/<owner>/peerlytics (lower case)
+        value: ${{ jobs.plan.outputs.image_prefix }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  plan:
+    name: Which images to build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      image_prefix: ${{ steps.plan.outputs.image_prefix }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+          sparse-checkout: |
+            backend/Dockerfile
+            collab/Dockerfile
+            notifier/Dockerfile
+          sparse-checkout-cone-mode: false
+      - id: plan
+        env:
+          TAG: ${{ inputs.tag }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          if [[ ! "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "::error::Not a valid image tag: $TAG"
+            exit 1
+          fi
+          # backend builds from the repo root (it copies one frontend helper); the others from their folder.
+          entries=()
+          [[ -f backend/Dockerfile ]] && entries+=('{"service":"backend","context":".","dockerfile":"backend/Dockerfile"}')
+          [[ -f collab/Dockerfile ]] && entries+=('{"service":"collab","context":"collab","dockerfile":"collab/Dockerfile"}')
+          [[ -f notifier/Dockerfile ]] && entries+=('{"service":"notifier","context":"notifier","dockerfile":"notifier/Dockerfile"}')
+          matrix="{\"include\":[$(IFS=,; echo "${entries[*]}")]}"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "image_prefix=ghcr.io/${OWNER,,}/peerlytics" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: ${{ matrix.service }} (linux/arm64)
+    needs: plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/arm64
+          push: true
+          tags: ${{ needs.plan.outputs.image_prefix }}-${{ matrix.service }}:${{ inputs.tag }}
+          # The source label links the package to this repository, so GITHUB_TOKEN can pull it.
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ inputs.ref }}
+            org.opencontainers.image.version=${{ inputs.tag }}
+          cache-from: type=gha,scope=${{ matrix.service }}-arm64
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}-arm64

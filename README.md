@@ -17,40 +17,97 @@ Production-ready academic collaboration platform with Firebase auth, Firestore d
 
 ## Setup
 
+You need Node.js 22, Git and [Docker Desktop](https://www.docker.com/products/docker-desktop/). All commands run from the repo root unless a step says otherwise.
+
 ### 1. Install dependencies
+
+The frontend (repo root) and the backend (`backend/`) are two separate packages, so install both:
+
+```bash
 npm install
-cd backend && npm install && cd ..
+cd backend
+npm install
+cd ..
 ```
+
+Run this again **after every `git pull` that changes a `package.json`**. Otherwise Vite stops with errors like `Failed to resolve import "dompurify"`, and tests fail with `Cannot find package 'jsdom'`.
 
 ### 2. Firebase project
 
-1. Create a project at [Firebase Console](https://console.firebase.google.com/)
-2. Enable **Authentication** → Email/Password
-3. Create **Firestore Database**
-4. Register a **Web app** and copy config values
-5. Deploy rules from `firestore.rules` (Firestore → Rules → publish)
+The team project is **peerlytics-4367c** (`.firebaserc`). Ask Sangay for access. If you are setting up a new project instead:
+
+1. Create a project at [Firebase Console](https://console.firebase.google.com/).
+2. Authentication → Sign-in method: turn on **Email/Password** and **Google**.
+3. Create a **Firestore Database**.
+4. Register a **Web app** and copy its config values into `.env` (step 3).
+5. Deploy the rules: `firebase deploy --only firestore:rules,firestore:indexes` (see `DEPLOY-FIREBASE.md`).
+
+**Service account key (backend).** The role routes, Google sign-up, the server deadline lock and the reminder emails need it.
+
+1. Firebase Console → ⚙ Project settings → **Service accounts** → **Generate new private key**.
+2. Save the file as `backend/serviceAccountKey.json`. Git ignores it; never commit it or send it in chat.
+
+The key must come from the same project as the `VITE_FIREBASE_*` values. A key from another project makes Google sign-up fail with "Your sign-in could not be verified".
 
 ### 3. Environment variables
 
-Copy `.env.example` to `.env` in the project root:
+Copy `.env.example` to `.env` in the repo root. One file serves the frontend and the backend.
 
-```env
-VITE_FIREBASE_API_KEY=...
-VITE_FIREBASE_AUTH_DOMAIN=...
-VITE_FIREBASE_PROJECT_ID=...
-VITE_FIREBASE_STORAGE_BUCKET=...
-VITE_FIREBASE_MESSAGING_SENDER_ID=...
-VITE_FIREBASE_APP_ID=...
+```bash
+cp .env.example .env
 ```
 
-Optional backend:
+Then fill in:
 
-```env
-PORT=5000
-CORS_ORIGIN=http://localhost:3000
-```
+| Variable | Where it comes from |
+|---|---|
+| `VITE_FIREBASE_*` | The web app config from step 2 |
+| `FIREBASE_SERVICE_ACCOUNT` | `./serviceAccountKey.json` (the path is relative to `backend/`) |
+| `CORS_ORIGIN` | `http://localhost:3000` |
+| `HF_API_KEY`, `VWT_API_KEY` | Hugging Face and Virtual Writing Tutor keys. Without them, analysis shows "unavailable" and submissions still work |
+| `SMTP_USER`, `SMTP_PASS` | Optional, for reminder emails. With Gmail, `SMTP_PASS` is an **App Password**, not your normal password |
+| `POSTGRES_PASSWORD`, `DATABASE_URL`, `TEST_DATABASE_URL` | See step 4 |
 
-### 4. Run locally
+Leave the other values as they are in `.env.example`. Each one has a comment that explains it.
+
+### 4. PostgreSQL
+
+Courses, assignments, the server deadline lock and grades use PostgreSQL (`docs/db-schema.md`). Without `DATABASE_URL`, the API still starts, but those features are off.
+
+1. Make a password with letters and digits only:
+
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
+   ```
+
+2. Put it in `.env` in three places (replace `YOURPASS`):
+
+   ```env
+   POSTGRES_PASSWORD=YOURPASS
+   DATABASE_URL=postgres://peerlytics:YOURPASS@127.0.0.1:5433/peerlytics
+   TEST_DATABASE_URL=postgres://peerlytics:YOURPASS@127.0.0.1:5433/postgres
+   ```
+
+3. Open Docker Desktop and wait for **Engine running**. Then start the database and check that it says `healthy`:
+
+   ```bash
+   docker compose up -d postgres
+   docker compose ps
+   ```
+
+4. Create the tables:
+
+   ```bash
+   cd backend
+   npm run migrate:up
+   cd ..
+   ```
+
+**Looking inside the database.** Run `docker compose exec postgres psql -U peerlytics -d peerlytics`. Then `\dt` lists the tables, `\d workspaces` shows a table's columns, `SELECT * FROM workspaces;` shows its rows, and `\q` quits. A GUI such as pgAdmin, DBeaver or the VS Code PostgreSQL extension also works: host `127.0.0.1`, port **5433**, database and user `peerlytics`, password `YOURPASS`.
+
+**Stopping and starting.** `docker compose stop postgres` stops it and keeps the data. `docker compose up -d postgres` starts it again. Don't run `docker compose down -v`: `-v` deletes the database.
+
+### 5. Run locally
 
 **Terminal 1 — frontend:**
 
@@ -58,15 +115,43 @@ CORS_ORIGIN=http://localhost:3000
 npm run dev
 ```
 
-**Terminal 2 — API (plagiarism / AI checks):**
+**Terminal 2 — API:**
 
 ```bash
 npm run dev:server
 ```
 
-- Sign up: http://localhost:3000/signup  
-- Sign in: http://localhost:3000/login  
-- App: http://localhost:3000/dashboard  
+Check the API's start-up lines. With everything set up, there is no "is not set" warning, and it prints `Server deadline lock ON (… PostgreSQL deadlines for course workspaces)`. http://localhost:5000/api/health should show the database as up.
+
+- Sign up: http://localhost:3000/signup
+- Sign in: http://localhost:3000/login
+- App: http://localhost:3000/dashboard
+
+### 6. Lint and tests
+
+```bash
+npm run lint
+npm test
+cd backend
+npm run lint
+npm test
+npm run test:db
+cd ..
+```
+
+`npm run test:db` needs the database from step 4. Each run creates its own throwaway database and drops it afterwards, so your data is never touched.
+
+### After every `git pull`
+
+```bash
+npm install
+cd backend
+npm install
+npm run migrate:up
+cd ..
+```
+
+Then restart both terminals.
 
 ## Firestore collections
 

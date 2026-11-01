@@ -48,6 +48,8 @@ import {
 } from '../firebase/firestoreService';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { courseApi } from '../api';
+import { isCourseApiReady } from '../courses/courseApi';
 import { logOut } from '../firebase/authService';
 import { createActivityEntry, formatRelativeTime, formatDuration, formatDate, formatDateTime } from '../utils/workspaceHelpers';
 import { effectiveDeadline, isExtended } from '../deadlines/effectiveDeadline';

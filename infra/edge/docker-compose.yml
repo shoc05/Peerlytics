@@ -1,0 +1,47 @@
+# The one public entry point on the server (step 1.9): Caddy owns ports 80 and 443, gets HTTPS
+# certificates for STAGING_DOMAIN and PROD_DOMAIN by itself, and forwards to the app containers
+# over the external "edge" network (created by infra/ansible). Started and reloaded by
+# infra/scripts/deploy.sh:
+#   docker compose -p edge -f /opt/peerlytics/infra/edge/docker-compose.yml up -d --wait
+# Settings: /opt/peerlytics/edge.env (STAGING_DOMAIN, PROD_DOMAIN, ACME_EMAIL).
+name: edge
+
+services:
+  caddy:
+    image: caddy:2.11.7-alpine
+    env_file:
+      - path: ${EDGE_ENV_FILE:-/opt/peerlytics/edge.env}
+        required: true
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      # The folder, not the file: deploy.sh replaces the Caddyfile, and a single-file bind mount
+      # would keep showing the old one.
+      - ./:/etc/caddy:ro
+      # State that outlives a deploy: certificates, and the live production backend colour.
+      - ${EDGE_STATE_DIR:-/opt/peerlytics/edge}/upstreams:/etc/caddy-upstreams:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge]
+    healthcheck:
+      # The admin API listens on 127.0.0.1:2019 inside the container only.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:2019/config/ > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
+
+networks:
+  edge:
+    external: true
+    name: edge

@@ -1,0 +1,58 @@
+# Production only (step 5.1), added on top of docker-compose.yml by infra/scripts/lib.sh when
+# the environment is prod. The backend runs blue/green: backend_blue and backend_green each
+# have their own tag, and Caddy sends /api to the live one through
+# /opt/peerlytics/edge/upstreams/prod-backend.caddy. The other colour keeps running, so
+# infra/scripts/rollback.sh prod can switch back at once.
+#
+# Set by deploy.sh / rollback.sh from /opt/peerlytics/.color_tag-prod-<colour>:
+#   BLUE_TAG, GREEN_TAG          image tag per colour ("unset" for one that never ran)
+#   BLUE_RUN_JOBS, GREEN_RUN_JOBS "true" only for the live colour, so the reminder emails and
+#                                the deadline lock run once.
+# The plain `backend` service from docker-compose.yml is never started in production; deploy.sh
+# uses it only for `docker compose run --rm backend npm run migrate:up`.
+
+x-backend-colour: &backend-colour
+  env_file:
+    - path: /opt/peerlytics/.env.prod
+      required: true
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/api/health > /dev/null || exit 1"]
+    interval: 10s
+    timeout: 3s
+    start_period: 20s
+    retries: 3
+  mem_limit: 512m
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  backend_blue:
+    <<: *backend-colour
+    image: ${IMAGE_PREFIX}-backend:${BLUE_TAG:-unset}
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-peerlytics}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-peerlytics}
+      NODE_ENV: production
+      PORT: "5000"
+      RUN_JOBS: ${BLUE_RUN_JOBS:-false}
+    networks:
+      default: {}
+      edge:
+        aliases: [prod-backend-blue]
+
+  backend_green:
+    <<: *backend-colour
+    image: ${IMAGE_PREFIX}-backend:${GREEN_TAG:-unset}
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-peerlytics}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-peerlytics}
+      NODE_ENV: production
+      PORT: "5000"
+      RUN_JOBS: ${GREEN_RUN_JOBS:-false}
+    networks:
+      default: {}
+      edge:
+        aliases: [prod-backend-green]

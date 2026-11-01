@@ -1,0 +1,26 @@
+---
+- name: Create the deploy user (no password; keys only)
+  ansible.builtin.user:
+    name: "{{ deploy_user }}"
+    shell: /bin/bash
+    create_home: true
+    # "!" locks password login for this account.
+    password: "!"
+    update_password: on_create
+
+- name: Allow the deploy user's SSH key (and only that key)
+  ansible.posix.authorized_key:
+    user: "{{ deploy_user }}"
+    key: "{{ lookup('ansible.builtin.file', deploy_ssh_public_key_file) }}"
+    exclusive: true
+    state: present
+
+# The account has no password, so sudo can't ask for one. Access is protected by the SSH key.
+- name: Let the deploy user use sudo
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/90-{{ deploy_user }}"
+    content: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s

@@ -6,6 +6,7 @@ import { getFlag } from '../src/flags/index.js';
 import { reportTabs } from '../src/tabs/reportTabs.js';
 
 const router = Router();
+const CONTENT_TOO_SHORT_MESSAGE = 'Content too short for analysis (min 10 characters).';
 
 /**
  * POST /api/check — submission analysis used by the Peerlytics submission flow.

@@ -7,15 +7,23 @@ const TOKEN_ERRORS = {
   'auth/id-token-revoked': 'TOKEN_REVOKED',
   'auth/user-disabled': 'TOKEN_REVOKED',
 };
+const AUTHENTICATED = Symbol('authenticated');
 
 /** `getAuthClient()` returns a firebase-admin Auth (or null when the Admin SDK isn't configured). */
 export function createRequireAuth(getAuthClient) {
   return async function requireAuth(req, res, next) {
+    if (req[AUTHENTICATED]) return next();
+
     const header = req.get('authorization') || '';
     const match = /^Bearer\s+(\S+)$/i.exec(header);
     if (!match) return sendError(res, 401, 'NO_TOKEN');
 
-    const auth = getAuthClient();
+    let auth;
+    try {
+      auth = getAuthClient();
+    } catch (err) {
+      return next(err);
+    }
     if (!auth) return sendError(res, 503, 'AUTH_UNAVAILABLE');
 
     let decoded;
@@ -26,6 +34,7 @@ export function createRequireAuth(getAuthClient) {
       return sendError(res, 401, TOKEN_ERRORS[err?.code] || 'TOKEN_INVALID');
     }
     req.user = { uid: decoded.uid, email: decoded.email ?? null, ...claimsToRole(decoded) };
+    req[AUTHENTICATED] = true;
     return next();
   };
 }
