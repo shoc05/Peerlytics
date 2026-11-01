@@ -44,5 +44,8 @@ test('with METRICS_TOKEN set, scrapes need the token', async () => {
   const { base, close } = await serve('s3cret');
   assert.equal((await fetch(`${base}/metrics`)).status, 401);
   assert.equal((await fetch(`${base}/metrics`, { headers: { Authorization: 'Bearer s3cret' } })).status, 200);
+  assert.equal((await fetch(`${base}/metrics`, { headers: { 'X-Metrics-Token': 's3cret' } })).status, 200);
+  assert.equal((await fetch(`${base}/metrics`, { headers: { 'X-Metrics-Token': 'wrong' } })).status, 401);
+  assert.equal((await fetch(`${base}/metrics`, { headers: { Authorization: 's3cret' } })).status, 401);
   await close();
 });
