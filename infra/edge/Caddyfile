@@ -37,8 +37,9 @@
 
 {$PROD_DOMAIN} {
 	import common
+	# Blue/green (step 5.1): the live colour's reverse_proxy line, written by infra/scripts/lib.sh.
 	handle /api/* {
-		reverse_proxy prod-backend:5000
+		import /etc/caddy-upstreams/prod-backend.caddy
 	}
 	handle_path /collab* {
 		reverse_proxy prod-collab:1234

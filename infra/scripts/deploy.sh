@@ -6,6 +6,8 @@
 #   1. Caddy and the edge network are up and have the current Caddyfile.
 #   2. Pull the images, run the migrations (if the backend has a migrate:up script).
 #   3. backend, then collab, then notifier (if enabled), each healthy before the next.
+#      In prod the backend is blue/green: the new tag goes to the idle colour, which must be
+#      healthy before Caddy switches to it; the old colour keeps running (rollback.sh).
 #   4. Success: the tag is saved in /opt/peerlytics/.last_good_tag-<env> and old images pruned.
 #      Failure: the last good tag is deployed again and the script exits 1.
 set -Eeuo pipefail
@@ -38,10 +40,16 @@ deploy_tag() {
   migrate "$ENV_NAME" || return 1
   local s
   for s in "${services[@]}"; do
-    update_service "$ENV_NAME" "$s" || return 1
+    if [[ "$ENV_NAME" == prod && "$s" == backend ]]; then
+      deploy_backend_bluegreen "$TAG" || return 1
+    else
+      update_service "$ENV_NAME" "$s" || return 1
+    fi
   done
 }
 
+# rollback.sh runs compose without the CD workflow, so it needs the prefix.
+printf '%s\n' "$IMAGE_PREFIX" > "$PEERLYTICS_ROOT/.image_prefix-$ENV_NAME"
 ensure_edge
 
 if deploy_tag "$NEW_TAG"; then
