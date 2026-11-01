@@ -15,7 +15,7 @@ const CONTENT_TOO_SHORT_MESSAGE = 'Content too short for analysis (min 10 charac
  * the submission's paste events (real signal; EyeSift was removed). The report shape
  * is unchanged so the existing lecturer UI (AI Report / Analysis / Grading) keeps working.
  */
-router.post('/', async (req, res, next) => {
+router.post('/', async (req, res) => {
   try {
     res.json(await analyzeSubmission(req.body || {}));
   } catch (err) {
@@ -46,7 +46,7 @@ export async function analyzeSubmission(body) {
     const plainText = (text || '').trim() || stripHtml(html || '');
 
     if (plainText.length < 10) {
-      throw Object.assign(new Error('Content too short for analysis (min 10 characters).'), { status: 400 });
+      throw Object.assign(new Error(CONTENT_TOO_SHORT_MESSAGE), { status: 400 });
     }
 
     // Both providers run simultaneously; neither failing blocks the submission.
