@@ -2,7 +2,10 @@
 
 Steps 1.9 (staging) and 5.1 (production). Pipeline diagram: [diagrams/cd-pipeline.md](diagrams/cd-pipeline.md).
 
-Everything runs on one Oracle Cloud Always Free Ubuntu ARM (aarch64) server, with Docker and Compose:
+Everything runs on one Ubuntu server with Docker and Compose. Two kinds of server work:
+
+- **Your own PC** (`DEPLOY_MODE=local`): WSL2 Ubuntu with Docker Desktop, and a GitHub self-hosted runner in it that runs the deploy jobs. Free, but the API only answers on that PC, at `http://staging.localhost` and `http://prod.localhost`. See [Your PC as the server](#your-pc-as-the-server) and skip sections 1 and the `SSH_*` secrets.
+- **A cloud VM** (`DEPLOY_MODE` unset or `ssh`): for example an Azure Ubuntu x64 VM. GitHub's runners reach it over SSH, and it serves HTTPS on two DuckDNS names. An ARM VM such as Oracle Cloud's Always Free one works as well: set the repository variable `IMAGE_PLATFORM` to `linux/arm64` and open 80 and 443 in its subnet's security list instead of an NSG.
 
 | What | Where |
 |---|---|
@@ -13,16 +16,45 @@ Everything runs on one Oracle Cloud Always Free Ubuntu ARM (aarch64) server, wit
 
 One Caddy container (compose project `edge`) owns ports 80 and 443. It gets the HTTPS certificates for both domains by itself and forwards `/api` to the backend and `/collab` to the collab server. Staging and production are two separate compose projects, `peerlytics-staging` and `peerlytics-prod`. Each one has its own env file, its own PostgreSQL volume and its own private network. No app container publishes a port.
 
+## Your PC as the server
+
+The deploy jobs run on your PC instead of on GitHub. The images are still built by GitHub (amd64) and pulled from GHCR. Nothing is opened to the internet.
+
+| | Cloud VM | Your PC |
+|---|---|---|
+| Who runs the deploy job | GitHub runner, over SSH | Self-hosted runner in WSL2 |
+| API addresses | `https://<STAGING_DOMAIN>`, `https://<PROD_DOMAIN>` | `http://staging.localhost`, `http://prod.localhost` |
+| Certificates | Caddy gets them | None (plain HTTP) |
+| Who can use the deployed API | Anyone | Only this PC, while Docker and the runner run |
+
+1. **WSL2 and Docker.** In an admin PowerShell: `wsl --install -d Ubuntu`, then restart. In Docker Desktop, open **Settings → Resources → WSL integration**, turn on **Ubuntu**, and click **Apply & restart**. In Ubuntu, `docker version` must show a Server part.
+2. **Server folders and files.** In Ubuntu, from a clone of the repo:
+   ```bash
+   bash infra/scripts/setup-local-server.sh <github-owner> <your email>
+   ```
+   It creates `/opt/peerlytics` (owned by you), the `edge` network, `edge.env` with the two localhost names, and `.env.staging`/`.env.prod` with a random database password. Existing files are kept. Then paste the Firebase service-account JSON into `FIREBASE_SERVICE_ACCOUNT` in both env files (on one line, in single quotes), and add the API keys you have.
+3. **The runner.** On GitHub: **Settings → Actions → Runners → New self-hosted runner → Linux x64**. Run its *Download* and *Configure* commands in Ubuntu, in `~/actions-runner`. When `config.sh` asks for labels, enter `peerlytics-server`. Start it with `./run.sh` and keep that window open whenever a deploy should run. A queued deploy waits until the runner is back.
+4. **Keep fork PRs off your PC.** A self-hosted runner on a public repository can be targeted by a pull request from a fork that edits a workflow. In **Settings → Actions → General → Fork pull request workflows**, choose **Require approval for all external contributors**, and only approve PRs whose workflow changes you have read. Only the deploy jobs ask for the `peerlytics-server` label.
+5. **GitHub settings** as in section 3, with these differences:
+   - Repository variable `DEPLOY_MODE` = `local`.
+   - `STAGING_DOMAIN` = `staging.localhost`, `PROD_DOMAIN` = `prod.localhost` (no `http://`).
+   - `VITE_API_URL_STAGING` = `http://staging.localhost`, `VITE_COLLAB_URL_STAGING` = `ws://staging.localhost/collab`; `VITE_API_URL_PROD` = `http://prod.localhost`, `VITE_COLLAB_URL_PROD` = `ws://prod.localhost/collab`.
+   - No `SSH_*` secrets.
+
+The websites are still on GitHub Pages and Firebase Hosting. They call the API on `*.localhost`, which browsers send to your own PC and allow from an HTTPS page. Chrome may ask once whether the site may reach devices on your local network; allow it. Rollbacks run in Ubuntu: `bash /opt/peerlytics/infra/scripts/rollback.sh prod`.
+
+To show the staging API to someone else for a while, a Cloudflare quick tunnel needs no account: `cloudflared tunnel --url http://localhost:80 --http-host-header staging.localhost` prints a temporary `https://….trycloudflare.com` address. The website build has the API address baked in, so the website itself still calls `staging.localhost`.
+
 ## 1. Set up the server
 
-1. Create the VM (Ubuntu 22.04 or 24.04, Ampere A1). In the subnet's **security list**, add ingress rules for TCP 80 and 443 from `0.0.0.0/0`.
+1. Create the VM: Ubuntu Server 24.04 LTS x64, size B2s (2 vCPU, 4 GB; staging and production together need about 2.5 GB), SSH key login, admin user `azureuser`. In its **network security group**, allow inbound TCP 22, 80 and 443 from any source. GitHub's runners have no fixed address, and only keys can log in. Make the public IP **static** so it survives a stop and start. Stopping (deallocating) the VM when nobody needs it saves most of the credit.
 2. Point both DuckDNS names at the VM's public IP.
 3. From a Linux, macOS or WSL machine, run the playbook. It sets up Docker, the `deploy` user, iptables for 80 and 443, the folders and the `edge` network (details in [infra/ansible/README.md](../infra/ansible/README.md)):
    ```bash
    cd infra/ansible
    ansible-galaxy collection install -r requirements.yml -p collections
    cp inventory.example.ini inventory.ini        # add: vps1 ansible_host=<server IP>
-   ansible-playbook site.yml -u ubuntu -e deploy_ssh_public_key_file=~/.ssh/id_ed25519.pub
+   ansible-playbook site.yml -u azureuser -e deploy_ssh_public_key_file=~/.ssh/id_ed25519.pub
    ```
 4. Make a separate key pair for GitHub Actions, and add its public key to `/home/deploy/.ssh/authorized_keys`. The playbook's `users` role keeps only the keys it knows about, so either pass this key as `deploy_ssh_public_key_file` or add it after every playbook run.
 5. Write the env files below as `deploy`, with `chmod 600`.
@@ -76,6 +108,8 @@ The production environment already has **required reviewers**, so a release wait
 | `VITE_API_URL_STAGING` | `https://<STAGING_DOMAIN>` |
 | `VITE_COLLAB_URL_STAGING` | `wss://<STAGING_DOMAIN>/collab` (empty keeps live editing off) |
 | `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID` | The Firebase web config. It ships in every page, so it isn't a secret |
+| `DEPLOY_MODE` | Optional. `ssh` (default, a cloud VM) or `local` (your PC with a self-hosted runner, see above) |
+| `IMAGE_PLATFORM` | Optional. `linux/amd64` (default, the Azure VM) or `linux/arm64` (an ARM server). Must match the server's CPU |
 
 `GITHUB_TOKEN` pushes and pulls the images. You don't need a registry password. On the server it's piped into `docker login --password-stdin`, and the server is logged out again at the end of the job.
 
@@ -89,7 +123,7 @@ In `.env.prod`, `CORS_ORIGIN` must be the production site's origin, e.g. `https:
 
 1. A PR is merged into develop, and **CI** runs on the push.
 2. When CI succeeds, two workflows start:
-   - **CD staging** (`cd-staging.yml`) checks out exactly that commit and builds the linux/arm64 images through `build-images.yml`. They are tagged `sha-<7 chars>` and pushed to `ghcr.io/<owner>/peerlytics-<service>`. The deploy job (environment `staging`, one at a time) copies `infra/` to the server, logs the server in to GHCR and runs `infra/scripts/deploy.sh staging sha-<7>`.
+   - **CD staging** (`cd-staging.yml`) checks out exactly that commit and builds the images for `IMAGE_PLATFORM` (default linux/amd64) through `build-images.yml`. They are tagged `sha-<7 chars>` and pushed to `ghcr.io/<owner>/peerlytics-<service>`. The deploy job (environment `staging`, one at a time) copies `infra/` to the server, logs the server in to GHCR and runs `infra/scripts/deploy.sh staging sha-<7>`.
    - **Deploy staging website** (`deploy-pages.yml`) builds the site with `VITE_API_URL_STAGING` and base `/<repo>/`, copies `index.html` to `404.html` and publishes it to Pages.
 3. `deploy.sh`:
    1. starts Caddy and the `edge` network if they aren't running, checks the Caddyfile and reloads it;
@@ -161,7 +195,7 @@ For the website, use Firebase console → Hosting → release history → **Roll
 | `denied` / `unauthorized` when pulling from ghcr.io | The package isn't linked to the repo. Open the package → Package settings → Manage Actions access, and add the repo |
 | `.env.staging is missing` | Write the env file (section 2) |
 | `dependency failed to start: container ... is unhealthy` | `docker compose -p peerlytics-staging logs backend` (or `collab`). Usually a missing setting such as `FIREBASE_SERVICE_ACCOUNT` |
-| Caddy can't get a certificate | DuckDNS doesn't point at the server, or 80/443 are closed in the Oracle security list. `docker compose -p edge logs caddy` |
+| Caddy can't get a certificate | DuckDNS doesn't point at the server, or 80/443 are closed in the VM's network security group (Azure) or security list (Oracle). `docker compose -p edge logs caddy` |
 | Browser: CORS error | `CORS_ORIGIN` in `.env.staging` must be exactly `https://<owner>.github.io` (no path, no trailing slash) |
 | Staging website is blank, or 404 on assets | Pages Source isn't "GitHub Actions", or the repo was renamed. The base comes from the repo name |
 | `auth/unauthorized-domain` | Section 4 |
