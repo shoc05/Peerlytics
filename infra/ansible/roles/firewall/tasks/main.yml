@@ -3,9 +3,7 @@
 # end INPUT with a REJECT, and ufw fights with them. The public ports are accepted ahead of that
 # REJECT, now and after a reboot. Docker adds its own chains at start-up; they are left alone,
 # so `netfilter-persistent save` is never run (it would freeze Docker's rules into the file).
-# Oracle Cloud also filters in the VCN (open 80 and 443 in the subnet's security list), Azure in
-# the VM's network security group (open 22, 80 and 443). Azure's image has no REJECT rule, so
-# the rules.v4 step below is skipped there.
+# Oracle Cloud also filters in the VCN: open 80 and 443 in the subnet's security list as well.
 - name: Install iptables-persistent
   ansible.builtin.apt:
     name:

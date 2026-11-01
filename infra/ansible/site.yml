@@ -1,13 +1,13 @@
 ---
-# Peerlytics server (steps 3.3 and 1.9): a fresh Ubuntu 22.04/24.04 server (the Azure x64 VM,
-# or an Oracle Cloud ARM VM) ->
+# Peerlytics server (steps 3.3 and 1.9): a fresh Ubuntu 22.04/24.04 server (the Oracle Cloud
+# Always Free ARM VM) ->
 #   updates, a deploy user with SSH keys only, no password or root login, fail2ban,
 #   iptables with only 22/80/443 open, Docker with compose, the /opt/peerlytics folders and the
 #   "edge" Docker network that infra/edge and infra/compose use.
 # Safe to run again: every task checks before it changes anything.
 #
 #   ansible-galaxy collection install -r requirements.yml
-#   ansible-playbook site.yml -u azureuser -e deploy_ssh_public_key_file=~/.ssh/id_ed25519.pub   # first run on Azure
+#   ansible-playbook site.yml -u ubuntu -e deploy_ssh_public_key_file=~/.ssh/id_ed25519.pub   # first run on Oracle
 #
 # See README.md for the first run and how to check the result.
 

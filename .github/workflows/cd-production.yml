@@ -56,25 +56,20 @@ jobs:
   deploy:
     name: Deploy to production
     needs: build
-    # DEPLOY_MODE=local: the job runs on the self-hosted runner that is itself the server
-    # (docs/deploy.md, "Your PC as the server"). Otherwise a GitHub runner reaches it over SSH.
-    runs-on: ${{ vars.DEPLOY_MODE == 'local' && fromJSON('["self-hosted", "peerlytics-server"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: read
     # Required reviewers are set on this environment in GitHub; the job waits for one.
     environment:
       name: production
-      url: ${{ vars.DEPLOY_MODE == 'local' && 'http' || 'https' }}://${{ vars.PROD_DOMAIN }}/api/health
+      url: https://${{ vars.PROD_DOMAIN }}/api/health
     concurrency:
       group: deploy-production
       cancel-in-progress: false
     env:
       TAG: ${{ github.ref_name }}
       DOMAIN: ${{ vars.PROD_DOMAIN }}
-      MODE: ${{ vars.DEPLOY_MODE || 'ssh' }}
-      # The PC as the server has no certificates: plain HTTP on *.localhost.
-      SCHEME: ${{ vars.DEPLOY_MODE == 'local' && 'http' || 'https' }}
       SSH_HOST: ${{ secrets.SSH_HOST }}
       SSH_USER: ${{ secrets.SSH_USER }}
     steps:
@@ -88,14 +83,8 @@ jobs:
           API_URL: ${{ vars.VITE_API_URL_PROD }}
         run: |
           missing=()
-          case "$MODE" in
-            ssh)
-              [[ -n "$SSH_HOST" ]] || missing+=(secret SSH_HOST)
-              [[ -n "$SSH_USER" ]] || missing+=(secret SSH_USER)
-              ;;
-            local) ;;
-            *) missing+=(variable DEPLOY_MODE: ssh or local) ;;
-          esac
+          [[ -n "$SSH_HOST" ]] || missing+=(secret SSH_HOST)
+          [[ -n "$SSH_USER" ]] || missing+=(secret SSH_USER)
           [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || missing+=(variable PROD_DOMAIN)
           [[ -n "$API_URL" ]] || missing+=(variable VITE_API_URL_PROD)
           [[ "$HAS_FIREBASE_KEY" == true ]] || missing+=(secret FIREBASE_SERVICE_ACCOUNT_PEERLYTICS_4367C)
@@ -105,7 +94,6 @@ jobs:
           fi
 
       - name: Set up SSH (strict host key checking)
-        if: vars.DEPLOY_MODE != 'local'
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
@@ -125,19 +113,10 @@ jobs:
           EOF
           chmod 600 ~/.ssh/config ~/.ssh/known_hosts
 
-      # on-server runs one shell command on the server: over SSH, or right here when this runner
-      # is the server (DEPLOY_MODE=local). stdin is passed through either way.
-      - name: Choose how to reach the server
-        run: |
-          # shellcheck disable=SC2016 # $1 is the helper's argument, not this step's
-          if [[ "$MODE" == local ]]; then run='exec bash -c "$1"'; else run='exec ssh peerlytics "$1"'; fi
-          printf '#!/usr/bin/env bash\n%s\n' "$run" > "$RUNNER_TEMP/on-server"
-          chmod 700 "$RUNNER_TEMP/on-server"
-
       - name: Copy the deploy files to the server
         run: |
           tar -C infra -czf - compose edge scripts \
-            | "$RUNNER_TEMP/on-server" 'mkdir -p /opt/peerlytics/infra && tar -C /opt/peerlytics/infra -xzf -'
+            | ssh peerlytics 'mkdir -p /opt/peerlytics/infra && tar -C /opt/peerlytics/infra -xzf -'
 
       - name: Log the server in to GHCR
         env:
@@ -145,30 +124,32 @@ jobs:
           ACTOR: ${{ github.actor }}
         # The token goes over stdin only; ACTOR is a GitHub login, expanded here on purpose.
         run: |
-          printf '%s' "$GH_TOKEN" | "$RUNNER_TEMP/on-server" "docker login ghcr.io -u '$ACTOR' --password-stdin"
+          # shellcheck disable=SC2029
+          printf '%s' "$GH_TOKEN" | ssh peerlytics "docker login ghcr.io -u '$ACTOR' --password-stdin"
 
       - name: Run deploy.sh prod (backend blue/green)
         env:
           OWNER: ${{ github.repository_owner }}
         # TAG was checked against the version pattern in "CI passed for this commit".
         run: |
-          "$RUNNER_TEMP/on-server" "IMAGE_PREFIX=ghcr.io/${OWNER,,}/peerlytics bash /opt/peerlytics/infra/scripts/deploy.sh prod '$TAG'"
+          # shellcheck disable=SC2029
+          ssh peerlytics "IMAGE_PREFIX=ghcr.io/${OWNER,,}/peerlytics bash /opt/peerlytics/infra/scripts/deploy.sh prod '$TAG'"
 
       - name: Log the server out of GHCR
         if: always()
-        run: '"$RUNNER_TEMP/on-server" "docker logout ghcr.io" || true'
+        run: ssh peerlytics 'docker logout ghcr.io' || true
 
       - name: Smoke test /api/health
         run: |
           for i in $(seq 1 20); do
-            if body="$(curl -fsS --max-time 10 "$SCHEME://$DOMAIN/api/health")" && grep -q '"ok":true' <<<"$body"; then
+            if body="$(curl -fsS --max-time 10 "https://$DOMAIN/api/health")" && grep -q '"ok":true' <<<"$body"; then
               echo "$body"
               exit 0
             fi
             echo "Attempt $i: not healthy yet"
             sleep 6
           done
-          echo "::error::$SCHEME://$DOMAIN/api/health did not answer ok. Roll back with infra/scripts/rollback.sh prod"
+          echo "::error::https://$DOMAIN/api/health did not answer ok. Roll back with infra/scripts/rollback.sh prod"
           exit 1
 
       # The website goes live only after the API it calls is healthy.
@@ -208,21 +189,14 @@ jobs:
             echo "|---|---|"
             echo "| Tag | \`$TAG\` |"
             echo "| Commit | $SHA |"
-            echo "| API | $SCHEME://$DOMAIN/api/health |"
+            echo "| API | https://$DOMAIN/api/health |"
             echo "| Finished | $(date -u +%Y-%m-%dT%H:%M:%SZ) |"
-            if [[ "$MODE" == local ]]; then
-              echo "| Roll back | \`bash /opt/peerlytics/infra/scripts/rollback.sh prod\` in WSL |"
-            else
-              echo "| Roll back | \`ssh deploy@<server> /opt/peerlytics/infra/scripts/rollback.sh prod\` |"
-            fi
+            echo "| Roll back | \`ssh deploy@<server> /opt/peerlytics/infra/scripts/rollback.sh prod\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Remove the SSH key and helper
+      - name: Remove the SSH key
         if: always()
-        run: |
-          rm -f "$RUNNER_TEMP/on-server"
-          # Only the GitHub runner got a key; on the PC this would be the user's own file.
-          if [[ "$MODE" != local ]]; then rm -f ~/.ssh/deploy_key; fi
+        run: rm -f ~/.ssh/deploy_key
 
   release:
     name: GitHub release

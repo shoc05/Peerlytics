@@ -1,9 +1,7 @@
 name: Build images
 
-# Reusable (step 1.9): builds the images for the server's CPU and pushes them to GHCR as
-# ghcr.io/<owner>/peerlytics-<service>:<tag>. The platform is the repository variable
-# IMAGE_PLATFORM: linux/amd64 when unset (the Azure VM), linux/arm64 for an ARM server such as
-# Oracle's (built through QEMU, much slower). Called by cd-staging.yml and
+# Reusable (step 1.9): builds the linux/arm64 images for the Oracle server and pushes them to
+# GHCR as ghcr.io/<owner>/peerlytics-<service>:<tag>. Called by cd-staging.yml and
 # cd-production.yml. A service is built only if its Dockerfile exists, so notifier joins in
 # automatically once notifier/Dockerfile lands.
 on:
@@ -35,8 +33,6 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       image_prefix: ${{ steps.plan.outputs.image_prefix }}
-      platform: ${{ steps.plan.outputs.platform }}
-      arch: ${{ steps.plan.outputs.arch }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -51,18 +47,11 @@ jobs:
         env:
           TAG: ${{ inputs.tag }}
           OWNER: ${{ github.repository_owner }}
-          PLATFORM: ${{ vars.IMAGE_PLATFORM || 'linux/amd64' }}
         run: |
           if [[ ! "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
             echo "::error::Not a valid image tag: $TAG"
             exit 1
           fi
-          case "$PLATFORM" in
-            linux/amd64 | linux/arm64) ;;
-            *) echo "::error::IMAGE_PLATFORM must be linux/amd64 or linux/arm64, not $PLATFORM"; exit 1 ;;
-          esac
-          echo "platform=$PLATFORM" >> "$GITHUB_OUTPUT"
-          echo "arch=${PLATFORM#linux/}" >> "$GITHUB_OUTPUT"
           # backend builds from the repo root (it copies one frontend helper); the others from their folder.
           entries=()
           [[ -f backend/Dockerfile ]] && entries+=('{"service":"backend","context":".","dockerfile":"backend/Dockerfile"}')
@@ -73,7 +62,7 @@ jobs:
           echo "image_prefix=ghcr.io/${OWNER,,}/peerlytics" >> "$GITHUB_OUTPUT"
 
   build:
-    name: ${{ matrix.service }} (${{ needs.plan.outputs.platform }})
+    name: ${{ matrix.service }} (linux/arm64)
     needs: plan
     runs-on: ubuntu-latest
     permissions:
@@ -87,11 +76,9 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
-      # The runners are amd64; only an arm64 build needs emulation.
-      - if: needs.plan.outputs.arch != 'amd64'
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
-          platforms: ${{ needs.plan.outputs.arch }}
+          platforms: arm64
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
@@ -102,7 +89,7 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
-          platforms: ${{ needs.plan.outputs.platform }}
+          platforms: linux/arm64
           push: true
           tags: ${{ needs.plan.outputs.image_prefix }}-${{ matrix.service }}:${{ inputs.tag }}
           # The source label links the package to this repository, so GITHUB_TOKEN can pull it.
@@ -110,5 +97,5 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ inputs.ref }}
             org.opencontainers.image.version=${{ inputs.tag }}
-          cache-from: type=gha,scope=${{ matrix.service }}-${{ needs.plan.outputs.arch }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}-${{ needs.plan.outputs.arch }}
+          cache-from: type=gha,scope=${{ matrix.service }}-arm64
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}-arm64
