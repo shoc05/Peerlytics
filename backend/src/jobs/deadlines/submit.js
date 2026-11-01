@@ -2,7 +2,6 @@
 // saveFullSubmission + notifyLecturersSubmission write (src/firebase/firestoreService.js).
 // Document ids are fixed per file, so a retry after a crash overwrites instead of duplicating.
 import { detectContentDifficulty } from '../../../../src/utils/difficultyDetection.js';
-import { buildAuthorMetrics, countWords } from './postgres.js';
 
 export const AUTO_SUBMITTER = 'deadline';
 export const AUTO_SUBMITTER_NAME = 'Deadline auto-submit';
@@ -41,35 +40,6 @@ export function buildUnavailableReport({ reportId, nowIso, userId, fileId, group
 
 const docsOf = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-async function readContent(db, file) {
-  const contentSnap = await db.collection('documents').doc(file.id).get();
-  const stored = contentSnap.exists ? contentSnap.data() : {};
-  const html = stored.html || file.contentHtml || '';
-  return { html, text: stored.text || file.content || stripHtml(html) };
-}
-
-/**
- * What the PostgreSQL `submissions` row records for a group after its files were submitted:
- * the latest submitted file, its word count and every member's counts (never text).
- * Null when nothing was submitted, for example a group whose only file was empty.
- */
-export async function describeSubmission({ db, groupId, memberIds }) {
-  const groupRef = db.collection('groups').doc(groupId);
-  const files = docsOf(await groupRef.collection('files').where('submitted', '==', true).get());
-  if (!files.length) return null;
-  const file = files.sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')) || a.id.localeCompare(b.id))[0];
-  const [{ text }, analyticsSnap, pasteSnap] = await Promise.all([
-    readContent(db, file),
-    db.collection('analytics').doc(groupId).collection('members').get(),
-    groupRef.collection('pasteEvents').get(),
-  ]);
-  return {
-    wordCount: countWords(text),
-    authorMetrics: buildAuthorMetrics(memberIds, docsOf(analyticsSnap), docsOf(pasteSnap)),
-    documentRef: `groups/${groupId}/files/${file.id}`,
-  };
-}
-
 /**
  * Returns { submitted: true, reportId } or { skipped: reason }. `analyze` is analyzeSubmission
  * from backend/routes/check.js; if it fails, the "AI evaluation unavailable" report is used,
@@ -77,7 +47,10 @@ export async function describeSubmission({ db, groupId, memberIds }) {
  */
 export async function submitFile({ db, groupId, group, file, analyze, nowMs, log = () => {} }) {
   const groupRef = db.collection('groups').doc(groupId);
-  const { html, text } = await readContent(db, file);
+  const contentSnap = await db.collection('documents').doc(file.id).get();
+  const stored = contentSnap.exists ? contentSnap.data() : {};
+  const html = stored.html || file.contentHtml || '';
+  const text = stored.text || file.content || stripHtml(html);
   if (text.trim().length < 10) return { skipped: 'too-short' };
 
   const [versionSnap, pasteSnap, analyticsSnap] = await Promise.all([

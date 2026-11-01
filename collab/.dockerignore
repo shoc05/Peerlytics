@@ -1,8 +1,4 @@
 node_modules
 **/*.test.js
 .env
-.env.*
 *.json.key
-**/*serviceAccount*.json
-eslint.config.js
-README.md

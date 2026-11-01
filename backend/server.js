@@ -1,8 +1,21 @@
-// Entry point: load settings, connect to PostgreSQL, start the app and the background jobs.
-// The routes themselves are in app.js.
-import { loadDotenv, loadConfig, missingProviderKeys } from './config/index.js';
-// Before anything reads process.env, so it works from any working directory.
-loadDotenv();
+// Load env from the project ROOT .env regardless of the cwd the server is launched from.
+// (The .env lives one level up from /backend; loading the bare 'dotenv/config' only finds it
+// when started from root, which silently dropped HF_API_KEY/VWT_API_KEY when run from /backend
+// and made AI/writing analysis intermittently show "unavailable".)
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+const __dirnameSrv = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirnameSrv, '..', '.env') });
+import express from 'express';
+import cors from 'cors';
+import checkRouter from './routes/check.js';
+import analyzeRouter from './routes/analyze.js';
+import { createAuthRouter } from './src/auth/routes.js';
+import { startDeadlineReminders } from './services/reminderService.js';
+import { startServerDeadlines } from './src/jobs/deadlines/index.js';
+import { createExtensionRouter } from './src/jobs/deadlines/extensions.js';
+import { createMetrics } from './src/metrics/index.js';
 
 const { createApp } = await import('./app.js');
 const { createDb } = await import('./db/pool.js');
@@ -24,13 +37,46 @@ if (missing.length) {
 } else {
   console.log('✓ Analysis API keys present (Hugging Face + VWT).');
 }
-if (!config.databaseUrl) {
-  console.warn('⚠ DATABASE_URL is not set: PostgreSQL features are off and /api/health leaves out "db".');
+validateConfig();
+
+app.set('trust proxy', 1); // correct req.ip behind Render/hosting proxies (for rate limiting)
+// Prometheus: count and time every request; GET /metrics for the cluster (step 5.3).
+const metrics = createMetrics();
+app.use(metrics.middleware);
+app.use(metrics.router());
+app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
+app.use(express.json({ limit: '2mb' }));
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, name: 'Peerlytics API', version: '1.0.0' });
+});
+
+// ── Lightweight in-memory rate limiter for the analysis endpoints. Protects the
+// external-API quotas (Hugging Face/VWT) from accidental bursts. No extra dependency.
+// Per-IP sliding window; resets each window. For multi-instance scale, swap for Redis.
+function rateLimit({ windowMs = 60_000, max = 20 } = {}) {
+  const hits = new Map();
+  setInterval(() => hits.clear(), windowMs).unref?.();
+  return (req, res, next) => {
+    const key = req.ip || req.headers['x-forwarded-for'] || 'anon';
+    const n = (hits.get(key) || 0) + 1;
+    hits.set(key, n);
+    if (n > max) {
+      return res.status(429).json({ error: 'Too many analysis requests — please wait a moment and retry.' });
+    }
+    next();
+  };
 }
 
-const db = createDb({ databaseUrl: config.databaseUrl, max: config.databasePoolMax });
-const app = createApp({ config, db });
-const PORT = config.port;
+app.use('/api/check', analysisLimiter, checkRouter);
+app.use('/api/analyze', analysisLimiter, analyzeRouter);
+app.use('/api', createAuthRouter());
+app.use('/api', createExtensionRouter());
+
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(500).json({ error: 'Internal server error' });
+});
 
 const server = app.listen(PORT, () => {
   console.log(`Peerlytics API listening on http://localhost:${PORT}`);
@@ -42,7 +88,7 @@ const server = app.listen(PORT, () => {
   // (with a one-line log) unless FIREBASE_SERVICE_ACCOUNT + SMTP creds are configured.
   startDeadlineReminders();
   // Every minute: submit and lock workspaces past their deadline (dormant without the Admin SDK key).
-  startServerDeadlines({ pool: db.pool });
+  startServerDeadlines();
 });
 
 server.on('error', (err) => {
