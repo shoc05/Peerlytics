@@ -72,6 +72,43 @@ check "a refused deploy leaves no result file" test ! -e "$ROOT/.last_deploy-sta
 check "rollback.sh refuses staging" fails rollback staging
 
 
+# ── production blue/green (step 5.1) ────────────────────────────────────────────────────
+setup
+check "first release v1.0.0" deploy prod v1.0.0
+check "it goes live on blue" file_is "$ROOT/.active_color-prod" blue
+check "Caddy points at blue" grep -q 'prod-backend-blue:5000' "$ROOT/edge/upstreams/prod-backend.caddy"
+check "release v1.1.0" deploy prod v1.1.0
+check "it goes live on green" file_is "$ROOT/.active_color-prod" green
+check "blue keeps v1.0.0 as the standby" file_is "$ROOT/.color_tag-prod-blue" v1.0.0
+check "the plain backend service never starts in prod" fails grep -q '^backend ' "$CALLS.up"
+check "collab follows the backend" has_line "$CALLS.up" "collab v1.1.0"
+
+: > "$CALLS.up"
+export FAIL_TAG=v1.2.0 FAIL_SERVICE=backend_blue
+check "v1.2.0 unhealthy on the idle colour exits 1" fails deploy prod v1.2.0
+check "it records the rollback to v1.1.0" \
+  diff "$ROOT/.last_deploy-prod" <(printf 'result=rolled_back\ntag=v1.2.0\nrestored=v1.1.0\n')
+check "green stays live" file_is "$ROOT/.active_color-prod" green
+check "Caddy still points at green" grep -q 'prod-backend-green:5000' "$ROOT/edge/upstreams/prod-backend.caddy"
+check "blue goes back to v1.0.0" has_line "$CALLS.up" "backend_blue v1.0.0"
+check "blue's recorded tag is still v1.0.0" file_is "$ROOT/.color_tag-prod-blue" v1.0.0
+unset FAIL_TAG FAIL_SERVICE
+
+check "rollback.sh prod" rollback prod
+check "switches /api back to blue" file_is "$ROOT/.active_color-prod" blue
+check "Caddy points at blue again" grep -q 'prod-backend-blue:5000' "$ROOT/edge/upstreams/prod-backend.caddy"
+check "blue's tag becomes the last good one" file_is "$ROOT/.last_good_tag-prod" v1.0.0
+check "running it again switches forward to green" rollback prod
+check "green is live again" file_is "$ROOT/.active_color-prod" green
+
+setup
+export FAIL_TAG=v1.0.0 FAIL_SERVICE=backend_blue
+check "a failing first release exits 1" fails deploy prod v1.0.0
+check "no colour is recorded as live" test ! -e "$ROOT/.active_color-prod"
+check "the colour that never ran is stopped" grep -q 'stop backend_blue$' "$CALLS"
+check "rollback.sh has nothing to switch to" fails rollback prod
+unset FAIL_TAG FAIL_SERVICE
+
 echo
 if ((failures)); then
   echo "$failures failed"

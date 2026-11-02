@@ -52,7 +52,7 @@ flowchart LR
   subgraph server[Oracle ARM server]
     deploy --> mig[Migrations]
     mig --> idle[New tag on idle colour<br/>e.g. backend_green, jobs off]
-    idle -- unhealthy --> rb[Redeploy last good tag<br/>exit 1]
+    idle -- unhealthy --> rb[Idle colour back on its old tag<br/>live colour untouched<br/>result=rolled_back, exit 1]
     idle -- healthy --> on[Green again with jobs on]
     on --> switch[Caddy upstream to green<br/>caddy reload]
     switch --> off[Blue again with jobs off]
@@ -63,4 +63,6 @@ flowchart LR
   rest --> smoke[Smoke test<br/>https://PROD_DOMAIN/api/health]
   smoke --> web[Firebase Hosting live<br/>built with VITE_API_URL_PROD]
   web --> rel[GitHub release<br/>generated notes]
+  rel --> psum[Summary job<br/>tag to live, approval wait,<br/>since the merge, rollback, colour]
+  rb --> psum
 ```

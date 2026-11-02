@@ -144,7 +144,10 @@ Migrations only go forward. A rollback runs the older code against the newer sch
       - **blue keeps running** the previous release;
       - then collab and notifier update one at a time, as on staging;
    5. checks `https://<PROD_DOMAIN>/api/health`, then builds the website with `VITE_API_URL_PROD` and deploys it to Firebase Hosting (live);
-   6. creates a GitHub release with generated notes.
+   6. creates a GitHub release with generated notes;
+   7. writes a **Summary**: tag, commit, API and website URL, the live colour, minutes from tag to live, time spent waiting for approval, minutes since the merge into main, and whether a rollback happened.
+
+If the new backend is unhealthy on the idle colour, the live colour is never touched. The idle colour goes back to the release it ran before, so `rollback.sh` still has a working standby. The run goes red with `Rollback: yes` in the summary.
 
 Nothing on main deploys by itself. Production changes only when a tag is pushed.
 
@@ -161,6 +164,17 @@ Running it again switches forward. It doesn't touch collab, notifier or the webs
 IMAGE_PREFIX=ghcr.io/<owner>/peerlytics /opt/peerlytics/infra/scripts/deploy.sh prod v1.1.0
 ```
 For the website, use Firebase console → Hosting → release history → **Rollback**.
+
+### Numbers for the report
+
+Every run's Summary job holds them. Open the run in Actions and scroll to the summary:
+
+| Report | Where |
+|---|---|
+| Pipeline time | Staging: "Pipeline (CI start to live)". Production: "Pipeline (tag to live)", minus "Waiting for approval" |
+| Merge-to-live minutes | "Since the merge" |
+| Rollbacks | Runs whose summary says "Rollback: yes", plus `rollback.sh prod` runs by hand |
+| ZAP warnings | Staging "ZAP baseline alerts", by risk. The full report is the `zap-baseline-staging` artifact |
 
 ## 9. Common errors
 
