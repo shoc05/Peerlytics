@@ -40,6 +40,7 @@ Everything lives in `/opt/peerlytics`, owned by `deploy`. Names only; the values
 | `.active_color-prod`, `.color_tag-prod-blue`, `.color_tag-prod-green` | deploy.sh, rollback.sh | Which colour is live, and the tag each colour runs |
 | `.image_prefix-staging`, `.image_prefix-prod` | deploy.sh | The registry prefix, for rollback.sh |
 | `.last_good_tag-staging`, `.last_good_tag-prod` | deploy.sh | Last tag that deployed healthy |
+| `.last_deploy-staging`, `.last_deploy-prod` | deploy.sh | Outcome of the last deploy: `result=ok`, `rolled_back` or `failed`, the tag, and the tag it went back to. The workflows show it in their summary |
 | `.deploy.lock` | deploy.sh | Makes sure only one deploy runs at a time |
 
 `.env.example` in the repo lists every variable with a comment. The collab server won't start without `FIREBASE_SERVICE_ACCOUNT`, and the deploy then fails its health check.
@@ -75,6 +76,7 @@ The production environment already has **required reviewers**, so a release wait
 |---|---|
 | `VITE_API_URL_STAGING` | `https://<STAGING_DOMAIN>` |
 | `VITE_COLLAB_URL_STAGING` | `wss://<STAGING_DOMAIN>/collab` (empty keeps live editing off) |
+| `STAGING_SITE_URL` | Optional. Only if Pages has a custom domain; the default is `https://<owner>.github.io/<repo>/` |
 | `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID` | The Firebase web config. It ships in every page, so it isn't a secret |
 
 `GITHUB_TOKEN` pushes and pulls the images. You don't need a registry password. On the server it's piped into `docker login --password-stdin`, and the server is logged out again at the end of the job.
@@ -90,16 +92,24 @@ In `.env.prod`, `CORS_ORIGIN` must be the production site's origin, e.g. `https:
 1. A PR is merged into develop, and **CI** runs on the push.
 2. When CI succeeds, two workflows start:
    - **CD staging** (`cd-staging.yml`) checks out exactly that commit and builds the linux/arm64 images through `build-images.yml`. They are tagged `sha-<7 chars>` and pushed to `ghcr.io/<owner>/peerlytics-<service>`. The deploy job (environment `staging`, one at a time) copies `infra/` to the server, logs the server in to GHCR and runs `infra/scripts/deploy.sh staging sha-<7>`.
-   - **Deploy staging website** (`deploy-pages.yml`) builds the site with `VITE_API_URL_STAGING` and base `/<repo>/`, copies `index.html` to `404.html` and publishes it to Pages.
+   - **Deploy staging website** (`deploy-pages.yml`) builds the site with `VITE_API_URL_STAGING` and base `/<repo>/` and publishes it to Pages. If the build made no `404.html`, it copies `index.html` to `404.html`. It also writes the commit into `deploy-version.txt`, so the E2E job knows when Pages serves the new site.
 3. `deploy.sh`:
    1. starts Caddy and the `edge` network if they aren't running, checks the Caddyfile and reloads it;
    2. pulls the images and runs `npm run migrate:up` in the new backend image (if it has that script);
    3. updates backend, then collab, then notifier (if `NOTIFIER_ENABLED=true`). Each must be healthy before the next one starts;
    4. on success, saves the tag in `.last_good_tag-staging` and removes unused images older than a week;
-   5. on any failure, deploys the last good tag again and exits 1, so the workflow goes red.
-4. The workflow checks `https://<STAGING_DOMAIN>/api/health` and writes a summary: tag, commit, URL, time and minutes since the merge.
+   5. on any failure, deploys the last good tag again and exits 1, so the workflow goes red;
+   6. writes the outcome to `.last_deploy-staging`.
+4. The deploy job checks `https://<STAGING_DOMAIN>/api/health`. Two jobs then run side by side:
+   - **E2E:** waits until Pages serves the same commit, runs `npm run test:e2e:staging` with `BASE_URL` (the Pages site) and `API_URL` (`https://<STAGING_DOMAIN>`), and uploads `playwright-report/` as the `playwright-report-staging` artifact. A failing test makes the run red. Until step 5.8 adds the script, the job passes with a warning.
+   - **OWASP ZAP baseline:** a passive scan of `https://<STAGING_DOMAIN>/api/health`. It never fails the run and opens no issues. The reports are the `zap-baseline-staging` artifact.
+5. The **Summary** job writes one table: tag, commit, API and website URL, when it went live, pipeline minutes (CI start to live), minutes since the merge, whether a rollback happened, the E2E result and the ZAP alert count by risk.
 
-There's no OWASP ZAP job in the repo yet. When one exists, its baseline scan goes after the smoke test.
+**Checks before a merge:** on every PR that touches the workflows, `infra/`, `backend/` or `collab/`, **CD checks** (`cd-checks.yml`) runs:
+- actionlint and shellcheck;
+- `infra/scripts/test/deploy-scripts.test.sh`, which tests deploy.sh and rollback.sh against a fake docker;
+- `docker compose config` for every compose file, and `caddy validate`;
+- an arm64 build of each image, checking that it runs as non-root, has a HEALTHCHECK and contains no `.env` or key files.
 
 **Important:** GitHub only runs `workflow_run` workflows from the **default branch** (main). CD staging and the Pages deploy start firing once these files have reached main.
 
@@ -165,6 +175,10 @@ For the website, use Firebase console → Hosting → release history → **Roll
 | Browser: CORS error | `CORS_ORIGIN` in `.env.staging` must be exactly `https://<owner>.github.io` (no path, no trailing slash) |
 | Staging website is blank, or 404 on assets | Pages Source isn't "GitHub Actions", or the repo was renamed. The base comes from the repo name |
 | `auth/unauthorized-domain` | Section 4 |
+| E2E: `didn't serve <sha> within 15 minutes` | The Deploy staging website run failed or is stuck, or Pages Source isn't "GitHub Actions". Check that run first |
+| E2E skipped with a warning | `package.json` has no `test:e2e:staging` script yet (step 5.8) |
+| ZAP alerts | Open the `zap-baseline-staging` artifact. Most baseline alerts are missing headers, which belong in `infra/edge/Caddyfile` |
+| Summary says `Rollback: yes` | The new tag was unhealthy and staging is back on the tag shown. Read the "Run deploy.sh staging" log |
 | CD staging never starts | The workflow isn't on main yet (section 5), or CI failed or ran for a PR rather than a push |
 | CD production: `No successful CI run for <sha>` | The tag points at a commit CI never passed on (for example, tagged locally before the merge). Tag the merge commit on main |
 | Production deploy waits forever | Nobody has approved it yet: Actions → the run → Review deployments |

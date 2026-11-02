@@ -1,0 +1,119 @@
+name: CD checks
+
+# Step 1.9: checks for the deploy files on every PR that touches them, so a broken workflow,
+# script, compose file, Caddyfile or image shows up before it reaches staging. Separate from
+# CI on purpose: CI's jobs are required status checks and stay as they are.
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - .github/workflows/**
+      - infra/compose/**
+      - infra/edge/**
+      - infra/scripts/**
+      - backend/**
+      - collab/**
+      - notifier/**
+      - docker-compose.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: actionlint, shellcheck, deploy script tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: actionlint
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
+      - name: shellcheck
+        run: shellcheck --version && shellcheck -x infra/scripts/*.sh infra/scripts/test/*.sh
+      - name: deploy.sh and rollback.sh with a fake docker
+        run: bash infra/scripts/test/deploy-scripts.test.sh
+
+  compose:
+    name: docker compose config, caddy validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      # Throwaway values, only so the files resolve; the real ones live on the server.
+      - name: Placeholder env files
+        run: |
+          sudo install -d -o "$USER" /opt/peerlytics/edge/upstreams
+          for env in staging prod; do printf 'POSTGRES_PASSWORD=ci-only-password\n' > "/opt/peerlytics/.env.$env"; done
+          printf 'STAGING_DOMAIN=staging.example.test\nPROD_DOMAIN=prod.example.test\nACME_EMAIL=ci@example.test\n' > /opt/peerlytics/edge.env
+          printf 'reverse_proxy prod-backend-blue:5000\n' > /opt/peerlytics/edge/upstreams/prod-backend.caddy
+      - name: docker compose config
+        env:
+          IMAGE_PREFIX: ghcr.io/example/peerlytics
+          TAG: sha-0000000
+          BLUE_TAG: v0.0.1
+          GREEN_TAG: unset
+          POSTGRES_PASSWORD: ci-only-password
+        run: |
+          set -x
+          for env in staging prod; do
+            files=(-f infra/compose/docker-compose.yml)
+            [[ -f "infra/compose/docker-compose.$env.yml" ]] && files+=(-f "infra/compose/docker-compose.$env.yml")
+            DEPLOY_ENV="$env" docker compose -p "peerlytics-$env" --env-file "/opt/peerlytics/.env.$env" \
+              "${files[@]}" --profile notifier config -q
+          done
+          docker compose -p edge -f infra/edge/docker-compose.yml config -q
+          docker compose -f docker-compose.yml config -q
+      - name: caddy validate
+        run: |
+          image="$(sed -n 's/^ *image: *\(caddy:[^ ]*\)$/\1/p' infra/edge/docker-compose.yml)"
+          docker run --rm --env-file /opt/peerlytics/edge.env \
+            -v "$PWD/infra/edge:/etc/caddy:ro" -v /opt/peerlytics/edge/upstreams:/etc/caddy-upstreams:ro \
+            "$image" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+  images:
+    name: ${{ matrix.service }} image (linux/arm64, not pushed)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { service: backend, context: ., dockerfile: backend/Dockerfile }
+          - { service: collab, context: collab, dockerfile: collab/Dockerfile }
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/arm64
+          push: false
+          load: true
+          tags: peerlytics-${{ matrix.service }}:check
+          # Read the cache build-images.yml writes; a PR never writes it.
+          cache-from: type=gha,scope=${{ matrix.service }}-arm64
+      - name: Runs as non-root, no secrets in the image
+        env:
+          IMAGE: peerlytics-${{ matrix.service }}:check
+        run: |
+          user="$(docker image inspect -f '{{.Config.User}}' "$IMAGE")"
+          [[ -n "$user" && "$user" != root && "$user" != 0 ]] || { echo "::error::$IMAGE runs as root"; exit 1; }
+          [[ "$(docker image inspect -f '{{if .Config.Healthcheck}}yes{{end}}' "$IMAGE")" == yes ]] \
+            || { echo "::error::$IMAGE has no HEALTHCHECK"; exit 1; }
+          found="$(docker run --rm --platform linux/arm64 --entrypoint sh "$IMAGE" -c \
+            'find /app -path "*/node_modules" -prune -o \( -name ".env" -o -name ".env.*" -o -name "*serviceAccount*.json" -o -name "*.json.key" \) -print' || true)"
+          [[ -z "$found" ]] || { echo "::error::Secret-looking files in $IMAGE: $found"; exit 1; }
+          echo "$IMAGE: user $user, healthcheck, no secret files"

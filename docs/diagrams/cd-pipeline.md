@@ -7,7 +7,7 @@ flowchart LR
   dev([Merge PR into develop]) --> ci[CI<br/>lint, tests, build]
   ci -- failure --> stop([No deploy])
   ci -- success on push --> build[build-images.yml<br/>QEMU + buildx linux/arm64<br/>tag sha-&lt;short&gt;]
-  ci -- success on push --> pages[deploy-pages.yml<br/>Vite build, base /&lt;repo&gt;/]
+  ci -- success on push --> pages[deploy-pages.yml<br/>Vite build, base /&lt;repo&gt;/<br/>deploy-version.txt]
   build --> ghcr[(GHCR<br/>peerlytics-backend<br/>peerlytics-collab)]
   pages --> gp[GitHub Pages<br/>staging website]
 
@@ -21,16 +21,23 @@ flowchart LR
     mig --> be[backend healthy?]
     be --> co[collab healthy?]
     co --> no[notifier healthy?]
-    no -- yes --> save[Save .last_good_tag-staging<br/>prune old images]
-    be -- no --> rb[Redeploy last good tag<br/>exit 1]
+    no -- yes --> save[Save .last_good_tag-staging<br/>prune old images<br/>result=ok]
+    be -- no --> rb[Redeploy last good tag<br/>result=rolled_back, exit 1]
     co -- no --> rb
     no -- no --> rb
     caddy[Caddy edge :443<br/>/api → backend<br/>/collab → collab]
   end
 
   save --> smoke[Smoke test<br/>https://STAGING_DOMAIN/api/health]
-  smoke --> summary[Job summary<br/>tag, commit, URL, minutes since merge]
+  smoke --> e2e[E2E job<br/>wait for Pages to serve this commit<br/>npm run test:e2e:staging<br/>artifact playwright-report]
+  gp -. BASE_URL .-> e2e
+  smoke --> zap[OWASP ZAP baseline<br/>passive, never fails<br/>artifact zap-baseline-staging]
+  e2e --> summary[Summary job<br/>tag, commit, URLs, pipeline and<br/>merge-to-live minutes, rollback,<br/>E2E, ZAP alerts]
+  zap --> summary
+  rb --> summary
 ```
+
+Before a merge, **CD checks** (`cd-checks.yml`) runs on the PR: actionlint, shellcheck, the deploy script tests with a fake docker, `docker compose config`, `caddy validate` and arm64 image builds.
 
 ## Production (step 5.1)
 

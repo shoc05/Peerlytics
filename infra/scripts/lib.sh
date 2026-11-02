@@ -24,6 +24,14 @@ check_tag() {
 
 env_file() { printf '%s/.env.%s' "$PEERLYTICS_ROOT" "$1"; }
 last_good_file() { printf '%s/.last_good_tag-%s' "$PEERLYTICS_ROOT" "$1"; }
+last_deploy_file() { printf '%s/.last_deploy-%s' "$PEERLYTICS_ROOT" "$1"; }
+
+# record_result <env> <ok|rolled_back|failed> <tag> <restored tag>: the outcome the CD workflows
+# show in their job summary (they read /opt/peerlytics/.last_deploy-<env>).
+record_result() {
+  printf 'result=%s\ntag=%s\nrestored=%s\n' "$2" "$3" "$4" > "$(last_deploy_file "$1")"
+  log "result=$2 tag=$3${4:+ restored=$4}"
+}
 
 # app_compose <env> <compose args...>: docker compose for one environment's project.
 # Uses DEPLOY_ENV, TAG and IMAGE_PREFIX from the caller's environment.
