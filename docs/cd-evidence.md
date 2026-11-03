@@ -20,6 +20,8 @@ You run k6 from your PC. Tshewang merges, tags and approves. Everything the load
 
 What the test does: `GET /api/health` (expects 200) and `GET /api/auth/me` with no token (expects 401 from the auth middleware), each at `RATE` requests per second (default 5, so 10 in all) for `DURATION` (default 3m). Any other status, a timeout or a refused connection counts as a failed request. `first_failure_at` and `last_failure_at` in the JSON bracket the outage.
 
+**What failures look like:** k6 prints a `Request Failed` warning for every failed request, so an outage scrolls a lot of text. That is normal. When any request fails, k6 ends with `thresholds ... have been crossed` and exit code 99. The summary and the JSON file are still written; exit 99 only means "some requests failed", which is the number you are measuring.
+
 **Timing:** the deploy job starts several minutes after a merge, because CI and the image builds run first. Start k6 when the **deploy** job starts, not at the merge, or the 3 minutes may be over before anything restarts. If you can't watch, use `-e DURATION=15m` instead.
 
 ## 1. Staging: one-at-a-time update
