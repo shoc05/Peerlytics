@@ -10,6 +10,8 @@
 #      healthy before Caddy switches to it; the old colour keeps running (rollback.sh).
 #   4. Success: the tag is saved in /opt/peerlytics/.last_good_tag-<env> and old images pruned.
 #      Failure: the last good tag is deployed again and the script exits 1.
+#   5. The outcome goes to /opt/peerlytics/.last_deploy-<env> (result=ok|rolled_back|failed,
+#      tag=, restored=), which the CD workflows read for their job summary.
 set -Eeuo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,6 +30,8 @@ export IMAGE_PREFIX
 # One deploy at a time on this server: staging and production share Caddy.
 exec 9> "$PEERLYTICS_ROOT/.deploy.lock"
 flock -w 600 9 || die "another deploy is still running"
+# No result file means this run stopped before it got to deploy anything.
+rm -f "$(last_deploy_file "$ENV_NAME")"
 
 # deploy_tag <tag>: every step for one tag; returns non-zero on the first failure.
 deploy_tag() {
@@ -54,6 +58,7 @@ ensure_edge
 
 if deploy_tag "$NEW_TAG"; then
   printf '%s\n' "$NEW_TAG" > "$(last_good_file "$ENV_NAME")"
+  record_result "$ENV_NAME" ok "$NEW_TAG" ""
   log "deployed $NEW_TAG to $ENV_NAME"
   # Images no container uses and older than a week. Running containers keep theirs.
   docker image prune -af --filter "until=168h" > /dev/null || true
@@ -68,10 +73,13 @@ if [[ -n "$LAST_GOOD" && "$LAST_GOOD" != "$NEW_TAG" ]]; then
   log "rolling back to the last good tag $LAST_GOOD"
   if deploy_tag "$LAST_GOOD"; then
     log "rolled back to $LAST_GOOD"
+    record_result "$ENV_NAME" rolled_back "$NEW_TAG" "$LAST_GOOD"
   else
     log "ERROR: rollback to $LAST_GOOD failed too; $ENV_NAME needs a look by hand" >&2
+    record_result "$ENV_NAME" failed "$NEW_TAG" ""
   fi
 else
   log "no earlier good tag for $ENV_NAME; nothing to roll back to"
+  record_result "$ENV_NAME" failed "$NEW_TAG" ""
 fi
 exit 1

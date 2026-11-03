@@ -4,13 +4,19 @@
 # Settings come from environment variables only (.env.example lists them); no .env or key file
 # is copied into the image (see Dockerfile.dockerignore). The same image runs the migrations:
 #   docker run --rm -e DATABASE_URL=... peerlytics-backend npm run migrate:up
+
+# Stage 1: production dependencies only. npm's cache and the lock-file install stay here.
+FROM node:22-alpine AS deps
+WORKDIR /app/backend
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
+
+# Stage 2: what runs. Files stay owned by root and read-only to the app user.
 FROM node:22-alpine
 ENV NODE_ENV=production \
     PORT=5000
 WORKDIR /app/backend
-COPY backend/package.json backend/package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
-# Files stay owned by root and read-only to the app user.
+COPY --from=deps /app/backend/node_modules ./node_modules
 COPY backend/ ./
 COPY src/utils/difficultyDetection.js /app/src/utils/difficultyDetection.js
 # The root package.json is "type": "module"; this stands in for it so the helper loads as ESM.

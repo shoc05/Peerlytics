@@ -72,6 +72,7 @@ Everything lives in `/opt/peerlytics`, owned by `deploy`. Names only; the values
 | `.active_color-prod`, `.color_tag-prod-blue`, `.color_tag-prod-green` | deploy.sh, rollback.sh | Which colour is live, and the tag each colour runs |
 | `.image_prefix-staging`, `.image_prefix-prod` | deploy.sh | The registry prefix, for rollback.sh |
 | `.last_good_tag-staging`, `.last_good_tag-prod` | deploy.sh | Last tag that deployed healthy |
+| `.last_deploy-staging`, `.last_deploy-prod` | deploy.sh | Outcome of the last deploy: `result=ok`, `rolled_back` or `failed`, the tag, and the tag it went back to. The workflows show it in their summary |
 | `.deploy.lock` | deploy.sh | Makes sure only one deploy runs at a time |
 
 `.env.example` in the repo lists every variable with a comment. The collab server won't start without `FIREBASE_SERVICE_ACCOUNT`, and the deploy then fails its health check.
@@ -107,6 +108,7 @@ The production environment already has **required reviewers**, so a release wait
 |---|---|
 | `VITE_API_URL_STAGING` | `https://<STAGING_DOMAIN>` |
 | `VITE_COLLAB_URL_STAGING` | `wss://<STAGING_DOMAIN>/collab` (empty keeps live editing off) |
+| `STAGING_SITE_URL` | Optional. Only if Pages has a custom domain; the default is `https://<owner>.github.io/<repo>/` |
 | `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID` | The Firebase web config. It ships in every page, so it isn't a secret |
 | `DEPLOY_MODE` | Optional. `ssh` (default, a cloud VM) or `local` (your PC with a self-hosted runner, see above) |
 | `IMAGE_PLATFORM` | Optional. `linux/amd64` (default, the Azure VM) or `linux/arm64` (an ARM server). Must match the server's CPU |
@@ -130,10 +132,18 @@ In `.env.prod`, `CORS_ORIGIN` must be the production site's origin, e.g. `https:
    2. pulls the images and runs `npm run migrate:up` in the new backend image (if it has that script);
    3. updates backend, then collab, then notifier (if `NOTIFIER_ENABLED=true`). Each must be healthy before the next one starts;
    4. on success, saves the tag in `.last_good_tag-staging` and removes unused images older than a week;
-   5. on any failure, deploys the last good tag again and exits 1, so the workflow goes red.
-4. The workflow checks `https://<STAGING_DOMAIN>/api/health` and writes a summary: tag, commit, URL, time and minutes since the merge.
+   5. on any failure, deploys the last good tag again and exits 1, so the workflow goes red;
+   6. writes the outcome to `.last_deploy-staging`.
+4. The deploy job checks `https://<STAGING_DOMAIN>/api/health`. Two jobs then run side by side:
+   - **E2E:** waits until Pages serves the same commit, runs `npm run test:e2e:staging` with `BASE_URL` (the Pages site) and `API_URL` (`https://<STAGING_DOMAIN>`), and uploads `playwright-report/` as the `playwright-report-staging` artifact. A failing test makes the run red. Until step 5.8 adds the script, the job passes with a warning.
+   - **OWASP ZAP baseline:** a passive scan of `https://<STAGING_DOMAIN>/api/health`. It never fails the run and opens no issues. The reports are the `zap-baseline-staging` artifact.
+5. The **Summary** job writes one table: tag, commit, API and website URL, when it went live, pipeline minutes (CI start to live), minutes since the merge, whether a rollback happened, the E2E result and the ZAP alert count by risk.
 
-There's no OWASP ZAP job in the repo yet. When one exists, its baseline scan goes after the smoke test.
+**Checks before a merge:** on every PR that touches the workflows, `infra/`, `backend/` or `collab/`, **CD checks** (`cd-checks.yml`) runs:
+- actionlint and shellcheck;
+- `infra/scripts/test/deploy-scripts.test.sh`, which tests deploy.sh and rollback.sh against a fake docker;
+- `docker compose config` for every compose file, and `caddy validate`;
+- an arm64 build of each image, checking that it runs as non-root, has a HEALTHCHECK and contains no `.env` or key files.
 
 **Important:** GitHub only runs `workflow_run` workflows from the **default branch** (main). CD staging and the Pages deploy start firing once these files have reached main.
 
@@ -168,7 +178,10 @@ Migrations only go forward. A rollback runs the older code against the newer sch
       - **blue keeps running** the previous release;
       - then collab and notifier update one at a time, as on staging;
    5. checks `https://<PROD_DOMAIN>/api/health`, then builds the website with `VITE_API_URL_PROD` and deploys it to Firebase Hosting (live);
-   6. creates a GitHub release with generated notes.
+   6. creates a GitHub release with generated notes;
+   7. writes a **Summary**: tag, commit, API and website URL, the live colour, minutes from tag to live, time spent waiting for approval, minutes since the merge into main, and whether a rollback happened.
+
+If the new backend is unhealthy on the idle colour, the live colour is never touched. The idle colour goes back to the release it ran before, so `rollback.sh` still has a working standby. The run goes red with `Rollback: yes` in the summary.
 
 Nothing on main deploys by itself. Production changes only when a tag is pushed.
 
@@ -186,6 +199,17 @@ IMAGE_PREFIX=ghcr.io/<owner>/peerlytics /opt/peerlytics/infra/scripts/deploy.sh 
 ```
 For the website, use Firebase console → Hosting → release history → **Rollback**.
 
+### Numbers for the report
+
+Every run's Summary job holds them. Open the run in Actions and scroll to the summary:
+
+| Report | Where |
+|---|---|
+| Pipeline time | Staging: "Pipeline (CI start to live)". Production: "Pipeline (tag to live)", minus "Waiting for approval" |
+| Merge-to-live minutes | "Since the merge" |
+| Rollbacks | Runs whose summary says "Rollback: yes", plus `rollback.sh prod` runs by hand |
+| ZAP warnings | Staging "ZAP baseline alerts", by risk. The full report is the `zap-baseline-staging` artifact |
+
 ## 9. Common errors
 
 | Symptom | Cause and fix |
@@ -199,6 +223,10 @@ For the website, use Firebase console → Hosting → release history → **Roll
 | Browser: CORS error | `CORS_ORIGIN` in `.env.staging` must be exactly `https://<owner>.github.io` (no path, no trailing slash) |
 | Staging website is blank, or 404 on assets | Pages Source isn't "GitHub Actions", or the repo was renamed. The base comes from the repo name |
 | `auth/unauthorized-domain` | Section 4 |
+| E2E: `didn't serve <sha> within 15 minutes` | The Deploy staging website run failed or is stuck, or Pages Source isn't "GitHub Actions". Check that run first |
+| E2E skipped with a warning | `package.json` has no `test:e2e:staging` script yet (step 5.8) |
+| ZAP alerts | Open the `zap-baseline-staging` artifact. Most baseline alerts are missing headers, which belong in `infra/edge/Caddyfile` |
+| Summary says `Rollback: yes` | The new tag was unhealthy and staging is back on the tag shown. Read the "Run deploy.sh staging" log |
 | CD staging never starts | The workflow isn't on main yet (section 5), or CI failed or ran for a PR rather than a push |
 | CD production: `No successful CI run for <sha>` | The tag points at a commit CI never passed on (for example, tagged locally before the merge). Tag the merge commit on main |
 | Production deploy waits forever | Nobody has approved it yet: Actions → the run → Review deployments |
