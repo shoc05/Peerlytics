@@ -14,6 +14,19 @@ test('collabUrl accepts ws/wss only and trims trailing slashes', () => {
   assert.equal(collabUrl({}), null);
 });
 
+test('collabUrl falls back to VITE_API_URL with /collab', () => {
+  assert.equal(collabUrl({ VITE_API_URL: 'https://staging.example.org' }), 'wss://staging.example.org/collab');
+  assert.equal(collabUrl({ VITE_API_URL: 'https://staging.example.org/api/' }), 'wss://staging.example.org/collab');
+  assert.equal(collabUrl({ VITE_API_URL: 'http://localhost:5000' }), 'ws://localhost:5000/collab');
+  // VITE_COLLAB_URL wins; an empty or relative VITE_API_URL (the Vite /api proxy) gives none.
+  assert.equal(
+    collabUrl({ VITE_COLLAB_URL: 'ws://localhost:1234', VITE_API_URL: 'https://x.example.org' }),
+    'ws://localhost:1234',
+  );
+  assert.equal(collabUrl({ VITE_API_URL: '' }), null);
+  assert.equal(collabUrl({ VITE_API_URL: '/api' }), null);
+});
+
 test('cursor colours are stable per user', () => {
   assert.equal(cursorColor('uid-1'), cursorColor('uid-1'));
   assert.match(cursorColor(''), /^#[0-9A-F]{6}$/i);

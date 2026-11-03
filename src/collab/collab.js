@@ -10,10 +10,17 @@ export function documentName(groupId, fileId) {
   return `group:${groupId}:file:${fileId}`;
 }
 
-/** The collab server's WebSocket URL from VITE_COLLAB_URL, or null when not configured. */
+/**
+ * The collab server's WebSocket URL, or null when not configured:
+ *   VITE_COLLAB_URL when set, otherwise VITE_API_URL's server at /collab
+ *   (https://api.example.org -> wss://api.example.org/collab; a trailing /api is dropped).
+ */
 export function collabUrl(env = {}) {
-  const url = String(env.VITE_COLLAB_URL || '').trim();
-  return /^wss?:\/\//.test(url) ? url.replace(/\/+$/, '') : null;
+  const explicit = String(env.VITE_COLLAB_URL || '').trim();
+  if (explicit) return /^wss?:\/\//.test(explicit) ? explicit.replace(/\/+$/, '') : null;
+  const api = String(env.VITE_API_URL || '').trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//.test(api)) return null;
+  return `${api.replace(/^http/, 'ws').replace(/\/api$/, '')}/collab`;
 }
 
 const CURSOR_COLORS = ['#1D9E75', '#4FACFE', '#E67E22', '#9B59B6', '#E74C3C', '#16A085', '#D35400', '#2C3E50'];
