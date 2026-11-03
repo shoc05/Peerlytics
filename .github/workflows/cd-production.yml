@@ -234,6 +234,9 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PEERLYTICS_4367C }}
           channelId: live
           # Project from .firebaserc (peerlytics-4367c).
+      - name: Note when the website went live
+        id: site
+        run: echo "live_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Job summary
         if: always()
