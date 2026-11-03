@@ -6,17 +6,17 @@ How a change reaches staging, and a version tag reaches production. Details: [..
 flowchart LR
   dev([Merge PR into develop]) --> ci[CI<br/>lint, tests, build]
   ci -- failure --> stop([No deploy])
-  ci -- success on push --> build[build-images.yml<br/>QEMU + buildx linux/arm64<br/>tag sha-&lt;short&gt;]
-  ci -- success on push --> pages[deploy-pages.yml<br/>Vite build, base /&lt;repo&gt;/<br/>deploy-version.txt]
+  ci -- success on push --> build[build-images.yml<br/>buildx, IMAGE_PLATFORM<br/>default linux/amd64<br/>tag sha-&lt;short&gt;]
+  ci -- success on push --> pages[deploy-pages.yml<br/>Vite build, base /&lt;repo&gt;/]
   build --> ghcr[(GHCR<br/>peerlytics-backend<br/>peerlytics-collab)]
   pages --> gp[GitHub Pages<br/>staging website]
 
   subgraph job[cd-staging.yml deploy job, environment staging]
-    ssh[ssh + strict host key<br/>copy infra/, docker login] --> deploy[deploy.sh staging tag]
+    ssh[DEPLOY_MODE ssh: GitHub runner, strict host key<br/>DEPLOY_MODE local: self-hosted runner on the server<br/>copy infra/, docker login] --> deploy[deploy.sh staging tag]
   end
   ghcr --> ssh
 
-  subgraph server[Oracle ARM server, /opt/peerlytics]
+  subgraph server[Ubuntu server: cloud VM or WSL2 on a PC, /opt/peerlytics]
     deploy --> mig[Migrations]
     mig --> be[backend healthy?]
     be --> co[collab healthy?]
@@ -49,10 +49,10 @@ flowchart LR
   build --> approve{{environment production<br/>required reviewer}}
   approve --> deploy[deploy.sh prod v1.2.3]
 
-  subgraph server[Oracle ARM server]
+  subgraph server[Ubuntu server: cloud VM or WSL2 on a PC]
     deploy --> mig[Migrations]
     mig --> idle[New tag on idle colour<br/>e.g. backend_green, jobs off]
-    idle -- unhealthy --> rb[Redeploy last good tag<br/>exit 1]
+    idle -- unhealthy --> rb[Idle colour back on its old tag<br/>live colour untouched<br/>result=rolled_back, exit 1]
     idle -- healthy --> on[Green again with jobs on]
     on --> switch[Caddy upstream to green<br/>caddy reload]
     switch --> off[Blue again with jobs off]
@@ -63,4 +63,6 @@ flowchart LR
   rest --> smoke[Smoke test<br/>https://PROD_DOMAIN/api/health]
   smoke --> web[Firebase Hosting live<br/>built with VITE_API_URL_PROD]
   web --> rel[GitHub release<br/>generated notes]
+  rel --> psum[Summary job<br/>tag to live, approval wait,<br/>since the merge, rollback, colour]
+  rb --> psum
 ```
