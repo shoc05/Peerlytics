@@ -71,19 +71,24 @@ jobs:
     if: >-
       always() && needs.prepare.result == 'success' &&
       (needs.build.result == 'success' || needs.build.result == 'skipped')
-    runs-on: ubuntu-latest
+    # DEPLOY_MODE=local: the job runs on the self-hosted runner that is itself the server
+    # (docs/deploy.md, "Your PC as the server"). Otherwise a GitHub runner reaches it over SSH.
+    runs-on: ${{ vars.DEPLOY_MODE == 'local' && fromJSON('["self-hosted", "peerlytics-server"]') || 'ubuntu-latest' }}
     permissions:
       contents: read
       packages: read
     environment:
       name: staging
-      url: https://${{ vars.STAGING_DOMAIN }}/api/health
+      url: ${{ vars.DEPLOY_MODE == 'local' && 'http' || 'https' }}://${{ vars.STAGING_DOMAIN }}/api/health
     concurrency:
       group: deploy-staging
       cancel-in-progress: false
     env:
       TAG: ${{ needs.prepare.outputs.tag }}
       DOMAIN: ${{ vars.STAGING_DOMAIN }}
+      MODE: ${{ vars.DEPLOY_MODE || 'ssh' }}
+      # The PC as the server has no certificates: plain HTTP on *.localhost.
+      SCHEME: ${{ vars.DEPLOY_MODE == 'local' && 'http' || 'https' }}
       SSH_HOST: ${{ secrets.SSH_HOST }}
       SSH_USER: ${{ secrets.SSH_USER }}
     steps:
@@ -97,8 +102,14 @@ jobs:
       - name: Check the settings
         run: |
           missing=()
-          [[ -n "$SSH_HOST" ]] || missing+=(secret SSH_HOST)
-          [[ -n "$SSH_USER" ]] || missing+=(secret SSH_USER)
+          case "$MODE" in
+            ssh)
+              [[ -n "$SSH_HOST" ]] || missing+=(secret SSH_HOST)
+              [[ -n "$SSH_USER" ]] || missing+=(secret SSH_USER)
+              ;;
+            local) ;;
+            *) missing+=(variable DEPLOY_MODE: ssh or local) ;;
+          esac
           [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || missing+=(variable STAGING_DOMAIN)
           if (( ${#missing[@]} )); then
             echo "::error::Missing or invalid in the staging environment: ${missing[*]}"
@@ -106,6 +117,7 @@ jobs:
           fi
 
       - name: Set up SSH (strict host key checking)
+        if: vars.DEPLOY_MODE != 'local'
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
@@ -125,10 +137,19 @@ jobs:
           EOF
           chmod 600 ~/.ssh/config ~/.ssh/known_hosts
 
+      # on-server runs one shell command on the server: over SSH, or right here when this runner
+      # is the server (DEPLOY_MODE=local). stdin is passed through either way.
+      - name: Choose how to reach the server
+        run: |
+          # shellcheck disable=SC2016 # $1 is the helper's argument, not this step's
+          if [[ "$MODE" == local ]]; then run='exec bash -c "$1"'; else run='exec ssh peerlytics "$1"'; fi
+          printf '#!/usr/bin/env bash\n%s\n' "$run" > "$RUNNER_TEMP/on-server"
+          chmod 700 "$RUNNER_TEMP/on-server"
+
       - name: Copy the deploy files to the server
         run: |
           tar -C infra -czf - compose edge scripts \
-            | ssh peerlytics 'mkdir -p /opt/peerlytics/infra && tar -C /opt/peerlytics/infra -xzf -'
+            | "$RUNNER_TEMP/on-server" 'mkdir -p /opt/peerlytics/infra && tar -C /opt/peerlytics/infra -xzf -'
 
       - name: Log the server in to GHCR
         env:
@@ -136,32 +157,30 @@ jobs:
           ACTOR: ${{ github.actor }}
         # The token goes over stdin only; ACTOR is a GitHub login, expanded here on purpose.
         run: |
-          # shellcheck disable=SC2029
-          printf '%s' "$GH_TOKEN" | ssh peerlytics "docker login ghcr.io -u '$ACTOR' --password-stdin"
+          printf '%s' "$GH_TOKEN" | "$RUNNER_TEMP/on-server" "docker login ghcr.io -u '$ACTOR' --password-stdin"
 
       - name: Run deploy.sh staging
         env:
           OWNER: ${{ github.repository_owner }}
         # TAG was checked against the Docker tag pattern in "Decide what to deploy".
         run: |
-          # shellcheck disable=SC2029
-          ssh peerlytics "IMAGE_PREFIX=ghcr.io/${OWNER,,}/peerlytics bash /opt/peerlytics/infra/scripts/deploy.sh staging '$TAG'"
+          "$RUNNER_TEMP/on-server" "IMAGE_PREFIX=ghcr.io/${OWNER,,}/peerlytics bash /opt/peerlytics/infra/scripts/deploy.sh staging '$TAG'"
 
       - name: Log the server out of GHCR
         if: always()
-        run: ssh peerlytics 'docker logout ghcr.io' || true
+        run: '"$RUNNER_TEMP/on-server" "docker logout ghcr.io" || true'
 
       - name: Smoke test /api/health
         run: |
           for i in $(seq 1 20); do
-            if body="$(curl -fsS --max-time 10 "https://$DOMAIN/api/health")" && grep -q '"ok":true' <<<"$body"; then
+            if body="$(curl -fsS --max-time 10 "$SCHEME://$DOMAIN/api/health")" && grep -q '"ok":true' <<<"$body"; then
               echo "$body"
               exit 0
             fi
             echo "Attempt $i: not healthy yet"
             sleep 6
           done
-          echo "::error::https://$DOMAIN/api/health did not answer ok"
+          echo "::error::$SCHEME://$DOMAIN/api/health did not answer ok"
           exit 1
 
       # No OWASP ZAP job exists in this repository yet; add the baseline scan here when one does.
@@ -185,11 +204,14 @@ jobs:
             echo "|---|---|"
             echo "| Tag | \`$TAG\` |"
             echo "| Commit | ${SHA:-n/a (redeploy of an existing tag)} |"
-            echo "| URL | https://$DOMAIN/api/health |"
+            echo "| URL | $SCHEME://$DOMAIN/api/health |"
             echo "| Finished | $now |"
             echo "| Since the merge | $since |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Remove the SSH key
+      - name: Remove the SSH key and helper
         if: always()
-        run: rm -f ~/.ssh/deploy_key
+        run: |
+          rm -f "$RUNNER_TEMP/on-server"
+          # Only the GitHub runner got a key; on the PC this would be the user's own file.
+          if [[ "$MODE" != local ]]; then rm -f ~/.ssh/deploy_key; fi
