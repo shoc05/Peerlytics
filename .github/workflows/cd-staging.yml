@@ -194,17 +194,6 @@ jobs:
           echo "result=${result:-not_run}" >> "$GITHUB_OUTPUT"
           echo "restored=$restored" >> "$GITHUB_OUTPUT"
 
-      # deploy.sh writes result=ok|rolled_back|failed; no file means it stopped before deploying.
-      - name: Read the deploy result
-        id: result
-        if: always()
-        run: |
-          out="$(ssh peerlytics 'cat /opt/peerlytics/.last_deploy-staging 2> /dev/null' || true)"
-          result="$(sed -n 's/^result=\([a-z_]*\)$/\1/p' <<< "$out")"
-          restored="$(sed -n 's/^restored=\([A-Za-z0-9_.-]*\)$/\1/p' <<< "$out")"
-          echo "result=${result:-not_run}" >> "$GITHUB_OUTPUT"
-          echo "restored=$restored" >> "$GITHUB_OUTPUT"
-
       - name: Log the server out of GHCR
         if: always()
         run: '"$RUNNER_TEMP/on-server" "docker logout ghcr.io" || true'
@@ -389,7 +378,8 @@ jobs:
             echo "| Tag | \`$TAG\` |"
             echo "| Commit | ${SHA:-n/a (redeploy of an existing tag)} |"
             echo "| URL | $SCHEME://$DOMAIN/api/health |"
-            echo "| Finished | $now |"
+            echo "| Finished | $end |"
+            echo "| Pipeline (CI start to live) | $pipeline |"
             echo "| Since the merge | $since |"
             echo "| Rollback | $rollback |"
             echo "| E2E | $E2E |"
