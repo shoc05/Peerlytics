@@ -2,14 +2,14 @@
 
 A checklist to follow by hand. It collects the numbers and screenshots that show three things: staging updates with few or no failed requests, production switches blue/green without dropping requests, and a bad deploy rolls itself back. The pipeline is described in [deploy.md](deploy.md).
 
-You run k6 from your PC. Tshewang merges, tags and approves. Everything the load test calls is read-only.
+You run k6 from your PC. In local server mode (`DEPLOY_MODE=local`) that has to be the server PC, because `*.localhost` only answers there. Tshewang merges, tags and approves. Everything the load test calls is read-only.
 
 ## 0. Before you start
 
 - [ ] Install k6 (once): `winget install k6 --source winget`, then open a new terminal and check `k6 version`.
 - [ ] Note the addresses:
   - staging API `https://<STAGING_DOMAIN>` (local server mode: `http://staging.localhost`)
-  - production API `https://<PROD_DOMAIN>`
+  - production API `https://<PROD_DOMAIN>` (local server mode: `http://prod.localhost`)
   - staging website `https://<owner>.github.io/<repo>/`
 - [ ] The website build sets `VITE_APP_VERSION` to the commit (Tshewang, in `deploy-pages.yml` and `cd-production.yml`). Without it the footer says `Version dev` and screenshot 3.22 proves nothing.
 - [ ] Dry run from the repo root, 30 seconds against staging, while nothing deploys:
