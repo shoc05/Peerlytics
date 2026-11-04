@@ -6,6 +6,10 @@ backend/node_modules/
 dist/
 build/
 
+# Playwright output (npm run test:e2e:staging)
+playwright-report/
+test-results/
+
 # Environment / secrets — never commit (contains live API keys)
 .env
 .env.*

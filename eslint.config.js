@@ -4,7 +4,17 @@ import reactHooks from 'eslint-plugin-react-hooks';
 
 export default [
   {
-    ignores: ['dist/**'],
+    ignores: ['dist/**', 'playwright-report/**', 'test-results/**'],
+  },
+  {
+    // Node-side files: Vite plugins, Playwright config and E2E specs.
+    ...js.configs.recommended,
+    files: ['vite-plugins/**/*.js', 'e2e/**/*.js', 'playwright.config.js'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: globals.node,
+    },
   },
   {
     ...js.configs.recommended,
