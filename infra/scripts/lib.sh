@@ -24,6 +24,14 @@ check_tag() {
 
 env_file() { printf '%s/.env.%s' "$PEERLYTICS_ROOT" "$1"; }
 last_good_file() { printf '%s/.last_good_tag-%s' "$PEERLYTICS_ROOT" "$1"; }
+last_deploy_file() { printf '%s/.last_deploy-%s' "$PEERLYTICS_ROOT" "$1"; }
+
+# record_result <env> <ok|rolled_back|failed> <tag> <restored tag>: the outcome the CD workflows
+# show in their job summary (they read /opt/peerlytics/.last_deploy-<env>).
+record_result() {
+  printf 'result=%s\ntag=%s\nrestored=%s\n' "$2" "$3" "$4" > "$(last_deploy_file "$1")"
+  log "result=$2 tag=$3${4:+ restored=$4}"
+}
 
 # app_compose <env> <compose args...>: docker compose for one environment's project.
 # Uses DEPLOY_ENV, TAG and IMAGE_PREFIX from the caller's environment.
@@ -162,7 +170,28 @@ deploy_backend_bluegreen() {
   local tag="$1" active idle
   export_colours
   active="$(active_colour)"
+  # Already live on this tag (deploy.sh going back to the last good tag after the new one
+  # failed on the idle colour): keep it live, so the idle colour stays the older standby.
+  if [[ -n "$active" && "$(colour_tag "$active")" == "$tag" ]]; then
+    run_colour "$active" "$tag" true
+    return
+  fi
   idle="$(other_colour "${active:-green}")"
-  run_colour "$idle" "$tag" false || return 1
+  if ! run_colour "$idle" "$tag" false; then
+    restore_standby "$idle"
+    return 1
+  fi
   promote "$idle" "$tag"
+}
+
+# restore_standby <colour>: a colour that failed on a new tag goes back to the tag it ran before
+# (or stops, if it never ran one), so rollback.sh still finds a working standby.
+restore_standby() {
+  local colour="$1" previous
+  previous="$(colour_tag "$colour")"
+  if [[ "$previous" == unset ]]; then
+    app_compose prod stop "backend_$colour" || true
+  else
+    run_colour "$colour" "$previous" false || log "WARNING: backend_$colour didn't come back healthy on $previous"
+  fi
 }

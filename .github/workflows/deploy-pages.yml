@@ -38,9 +38,12 @@ jobs:
       - name: Build
         env:
           # Vite base and router basename: the site lives under /<repo>/ on Pages.
+          COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
           VITE_BASE: /${{ github.event.repository.name }}/
           VITE_API_URL: ${{ vars.VITE_API_URL_STAGING }}
           VITE_COLLAB_URL: ${{ vars.VITE_COLLAB_URL_STAGING }}
+          # The footer's "Version <sha>" line (step 5.8); the website shortens it to 7 characters.
+          VITE_APP_VERSION: ${{ github.event.workflow_run.head_sha || github.sha }}
           # The Firebase web config is public (it ships in every page), so it lives in variables.
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
@@ -55,7 +58,10 @@ jobs:
           fi
           npm run build
           # Pages has no rewrites: unknown paths get 404.html, which then boots the app router.
-          cp dist/index.html dist/404.html
+          # Step 5.8's build makes its own; until then it is a copy of index.html.
+          [[ -f dist/404.html ]] || cp dist/index.html dist/404.html
+          # cd-staging.yml's E2E job waits until Pages serves this commit.
+          printf '%s' "$COMMIT" > dist/deploy-version.txt
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist

@@ -7,6 +7,7 @@ name: CD production
 #      backend blue/green, collab and notifier, smoke-tests the API and publishes the website to
 #      Firebase Hosting (live).
 #   4. A GitHub release with generated notes.
+#   5. A Summary job: timings (tag to live, approval wait, since the merge), rollback, live colour.
 # Rollback: infra/scripts/rollback.sh prod on the server (docs/deploy.md).
 on:
   push:
@@ -24,8 +25,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: read
+    outputs:
+      started_at: ${{ steps.ci.outputs.started_at }}
     steps:
-      - env:
+      - id: ci
+        env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
@@ -41,6 +45,8 @@ jobs:
             exit 1
           fi
           echo "CI passed for $SHA"
+          # Start of the pipeline, for the summary (a few seconds after the tag was pushed).
+          echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build images
@@ -56,20 +62,34 @@ jobs:
   deploy:
     name: Deploy to production
     needs: build
-    runs-on: ubuntu-latest
+    # DEPLOY_MODE=local: the job runs on the self-hosted runner that is itself the server
+    # (docs/deploy.md, "Your PC as the server"). Otherwise a GitHub runner reaches it over SSH.
+    runs-on: ${{ vars.DEPLOY_MODE == 'local' && fromJSON('["self-hosted", "peerlytics-server"]') || 'ubuntu-latest' }}
     permissions:
       contents: read
       packages: read
     # Required reviewers are set on this environment in GitHub; the job waits for one.
     environment:
       name: production
-      url: https://${{ vars.PROD_DOMAIN }}/api/health
+      url: ${{ vars.DEPLOY_MODE == 'local' && 'http' || 'https' }}://${{ vars.PROD_DOMAIN }}/api/health
     concurrency:
       group: deploy-production
       cancel-in-progress: false
+    outputs:
+      approved_at: ${{ steps.start.outputs.approved_at }}
+      merged_at: ${{ steps.start.outputs.merged_at }}
+      result: ${{ steps.result.outputs.result }}
+      restored: ${{ steps.result.outputs.restored }}
+      colour: ${{ steps.result.outputs.colour }}
+      api_live_at: ${{ steps.smoke.outputs.live_at }}
+      site_url: ${{ steps.hosting.outputs.details_url }}
+      live_at: ${{ steps.site.outputs.live_at }}
     env:
       TAG: ${{ github.ref_name }}
       DOMAIN: ${{ vars.PROD_DOMAIN }}
+      MODE: ${{ vars.DEPLOY_MODE || 'ssh' }}
+      # The PC as the server has no certificates: plain HTTP on *.localhost.
+      SCHEME: ${{ vars.DEPLOY_MODE == 'local' && 'http' || 'https' }}
       SSH_HOST: ${{ secrets.SSH_HOST }}
       SSH_USER: ${{ secrets.SSH_USER }}
     steps:
@@ -77,14 +97,27 @@ jobs:
         with:
           persist-credentials: false
 
+      # The job starts once a reviewer approves; the tagged commit's date is the merge into main.
+      - name: Note the times
+        id: start
+        run: |
+          echo "approved_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "merged_at=$(git log -1 --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Check the settings
         env:
           HAS_FIREBASE_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PEERLYTICS_4367C != '' }}
           API_URL: ${{ vars.VITE_API_URL_PROD }}
         run: |
           missing=()
-          [[ -n "$SSH_HOST" ]] || missing+=(secret SSH_HOST)
-          [[ -n "$SSH_USER" ]] || missing+=(secret SSH_USER)
+          case "$MODE" in
+            ssh)
+              [[ -n "$SSH_HOST" ]] || missing+=(secret SSH_HOST)
+              [[ -n "$SSH_USER" ]] || missing+=(secret SSH_USER)
+              ;;
+            local) ;;
+            *) missing+=(variable DEPLOY_MODE: ssh or local) ;;
+          esac
           [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || missing+=(variable PROD_DOMAIN)
           [[ -n "$API_URL" ]] || missing+=(variable VITE_API_URL_PROD)
           [[ "$HAS_FIREBASE_KEY" == true ]] || missing+=(secret FIREBASE_SERVICE_ACCOUNT_PEERLYTICS_4367C)
@@ -94,6 +127,7 @@ jobs:
           fi
 
       - name: Set up SSH (strict host key checking)
+        if: vars.DEPLOY_MODE != 'local'
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
@@ -113,10 +147,19 @@ jobs:
           EOF
           chmod 600 ~/.ssh/config ~/.ssh/known_hosts
 
+      # on-server runs one shell command on the server: over SSH, or right here when this runner
+      # is the server (DEPLOY_MODE=local). stdin is passed through either way.
+      - name: Choose how to reach the server
+        run: |
+          # shellcheck disable=SC2016 # $1 is the helper's argument, not this step's
+          if [[ "$MODE" == local ]]; then run='exec bash -c "$1"'; else run='exec ssh peerlytics "$1"'; fi
+          printf '#!/usr/bin/env bash\n%s\n' "$run" > "$RUNNER_TEMP/on-server"
+          chmod 700 "$RUNNER_TEMP/on-server"
+
       - name: Copy the deploy files to the server
         run: |
           tar -C infra -czf - compose edge scripts \
-            | ssh peerlytics 'mkdir -p /opt/peerlytics/infra && tar -C /opt/peerlytics/infra -xzf -'
+            | "$RUNNER_TEMP/on-server" 'mkdir -p /opt/peerlytics/infra && tar -C /opt/peerlytics/infra -xzf -'
 
       - name: Log the server in to GHCR
         env:
@@ -124,32 +167,47 @@ jobs:
           ACTOR: ${{ github.actor }}
         # The token goes over stdin only; ACTOR is a GitHub login, expanded here on purpose.
         run: |
-          # shellcheck disable=SC2029
-          printf '%s' "$GH_TOKEN" | ssh peerlytics "docker login ghcr.io -u '$ACTOR' --password-stdin"
+          printf '%s' "$GH_TOKEN" | "$RUNNER_TEMP/on-server" "docker login ghcr.io -u '$ACTOR' --password-stdin"
 
       - name: Run deploy.sh prod (backend blue/green)
         env:
           OWNER: ${{ github.repository_owner }}
         # TAG was checked against the version pattern in "CI passed for this commit".
         run: |
-          # shellcheck disable=SC2029
-          ssh peerlytics "IMAGE_PREFIX=ghcr.io/${OWNER,,}/peerlytics bash /opt/peerlytics/infra/scripts/deploy.sh prod '$TAG'"
+          "$RUNNER_TEMP/on-server" "IMAGE_PREFIX=ghcr.io/${OWNER,,}/peerlytics bash /opt/peerlytics/infra/scripts/deploy.sh prod '$TAG'"
+
+      # deploy.sh writes result=ok|rolled_back|failed; no file means it stopped before deploying.
+      - name: Read the deploy result
+        id: result
+        if: always()
+        run: |
+          out="$("$RUNNER_TEMP/on-server" 'cat /opt/peerlytics/.last_deploy-prod /opt/peerlytics/.active_color-prod 2> /dev/null' || true)"
+          result="$(sed -n 's/^result=\([a-z_]*\)$/\1/p' <<< "$out")"
+          restored="$(sed -n 's/^restored=\([A-Za-z0-9_.-]*\)$/\1/p' <<< "$out")"
+          colour="$(grep -xE 'blue|green' <<< "$out" || true)"
+          {
+            echo "result=${result:-not_run}"
+            echo "restored=$restored"
+            echo "colour=$colour"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Log the server out of GHCR
         if: always()
-        run: ssh peerlytics 'docker logout ghcr.io' || true
+        run: '"$RUNNER_TEMP/on-server" "docker logout ghcr.io" || true'
 
       - name: Smoke test /api/health
+        id: smoke
         run: |
           for i in $(seq 1 20); do
-            if body="$(curl -fsS --max-time 10 "https://$DOMAIN/api/health")" && grep -q '"ok":true' <<<"$body"; then
+            if body="$(curl -fsS --max-time 10 "$SCHEME://$DOMAIN/api/health")" && grep -q '"ok":true' <<<"$body"; then
               echo "$body"
+              echo "live_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             echo "Attempt $i: not healthy yet"
             sleep 6
           done
-          echo "::error::https://$DOMAIN/api/health did not answer ok. Roll back with infra/scripts/rollback.sh prod"
+          echo "::error::$SCHEME://$DOMAIN/api/health did not answer ok. Roll back with infra/scripts/rollback.sh prod"
           exit 1
 
       # The website goes live only after the API it calls is healthy.
@@ -162,6 +220,8 @@ jobs:
         env:
           VITE_API_URL: ${{ vars.VITE_API_URL_PROD }}
           VITE_COLLAB_URL: ${{ vars.VITE_COLLAB_URL_PROD }}
+          # The footer's "Version <tag>" line (step 5.8).
+          VITE_APP_VERSION: ${{ github.ref_name }}
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
@@ -170,11 +230,15 @@ jobs:
           VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
         run: npm run build
       - name: Deploy to Firebase Hosting (live)
+        id: hosting
         uses: FirebaseExtended/action-hosting-deploy@500ac625ca2dd40cbd15f7659af953801858032a # v0.11.0
         with:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PEERLYTICS_4367C }}
           channelId: live
           # Project from .firebaserc (peerlytics-4367c).
+      - name: Note when the website went live
+        id: site
+        run: echo "live_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Job summary
         if: always()
@@ -189,14 +253,21 @@ jobs:
             echo "|---|---|"
             echo "| Tag | \`$TAG\` |"
             echo "| Commit | $SHA |"
-            echo "| API | https://$DOMAIN/api/health |"
+            echo "| API | $SCHEME://$DOMAIN/api/health |"
             echo "| Finished | $(date -u +%Y-%m-%dT%H:%M:%SZ) |"
-            echo "| Roll back | \`ssh deploy@<server> /opt/peerlytics/infra/scripts/rollback.sh prod\` |"
+            if [[ "$MODE" == local ]]; then
+              echo "| Roll back | \`bash /opt/peerlytics/infra/scripts/rollback.sh prod\` in WSL |"
+            else
+              echo "| Roll back | \`ssh deploy@<server> /opt/peerlytics/infra/scripts/rollback.sh prod\` |"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Remove the SSH key
+      - name: Remove the SSH key and helper
         if: always()
-        run: rm -f ~/.ssh/deploy_key
+        run: |
+          rm -f "$RUNNER_TEMP/on-server"
+          # Only the GitHub runner got a key; on the PC this would be the user's own file.
+          if [[ "$MODE" != local ]]; then rm -f ~/.ssh/deploy_key; fi
 
   release:
     name: GitHub release
@@ -210,3 +281,66 @@ jobs:
           REPO: ${{ github.repository }}
           VERSION: ${{ github.ref_name }}
         run: gh release create "$VERSION" --repo "$REPO" --verify-tag --generate-notes --title "$VERSION"
+
+  summary:
+    name: Summary
+    needs: [verify-ci, build, deploy, release]
+    if: always() && needs.verify-ci.result == 'success'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - env:
+          TAG: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          DOMAIN: ${{ vars.PROD_DOMAIN }}
+          MODE: ${{ vars.DEPLOY_MODE || 'ssh' }}
+          SCHEME: ${{ vars.DEPLOY_MODE == 'local' && 'http' || 'https' }}
+          BUILD: ${{ needs.build.result }}
+          DEPLOY: ${{ needs.deploy.result }}
+          RELEASE: ${{ needs.release.result }}
+          STARTED_AT: ${{ needs.verify-ci.outputs.started_at }}
+          APPROVED_AT: ${{ needs.deploy.outputs.approved_at }}
+          MERGED_AT: ${{ needs.deploy.outputs.merged_at }}
+          RESULT: ${{ needs.deploy.outputs.result }}
+          RESTORED: ${{ needs.deploy.outputs.restored }}
+          COLOUR: ${{ needs.deploy.outputs.colour }}
+          API_LIVE_AT: ${{ needs.deploy.outputs.api_live_at }}
+          SITE_URL: ${{ needs.deploy.outputs.site_url }}
+          LIVE_AT: ${{ needs.deploy.outputs.live_at }}
+        run: |
+          minutes() { echo "$(( ($(date -u -d "$2" +%s) - $(date -u -d "$1" +%s)) / 60 )) min"; }
+          end="${LIVE_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+          pipeline="$(minutes "$STARTED_AT" "$end")"
+          since="n/a"; approval="n/a (not approved)"; after="n/a"
+          [[ -n "$MERGED_AT" ]] && since="$(minutes "$MERGED_AT" "$end")"
+          [[ -n "$APPROVED_AT" ]] && approval="$(minutes "$STARTED_AT" "$APPROVED_AT")" && after="$(minutes "$APPROVED_AT" "$end")"
+          case "$RESULT" in
+            ok) rollback=no ;;
+            rolled_back) rollback="yes, back on \`$RESTORED\`" ;;
+            failed) rollback="needed but not possible; production needs a look" ;;
+            *) rollback="no (deploy.sh didn't run: build $BUILD, deploy $DEPLOY)" ;;
+          esac
+          status=failed
+          [[ "$DEPLOY" == success ]] && status=live
+          {
+            echo "### Production release $TAG: $status"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Tag | \`$TAG\` |"
+            echo "| Commit | $SHA |"
+            echo "| API | $SCHEME://$DOMAIN/api/health (backend_${COLOUR:-?}, healthy at ${API_LIVE_AT:-n/a}) |"
+            echo "| Website | ${SITE_URL:-n/a} |"
+            echo "| Live at | ${LIVE_AT:-not live} |"
+            echo "| Pipeline (tag to live) | $pipeline |"
+            echo "| Waiting for approval | $approval |"
+            echo "| Approval to live | $after |"
+            echo "| Since the merge | $since |"
+            echo "| Rollback | $rollback |"
+            echo "| GitHub release | $RELEASE |"
+            if [[ "$MODE" == local ]]; then
+              echo "| Roll back by hand | \`bash /opt/peerlytics/infra/scripts/rollback.sh prod\` in WSL |"
+            else
+              echo "| Roll back by hand | \`ssh deploy@<server> /opt/peerlytics/infra/scripts/rollback.sh prod\` |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -9,9 +9,11 @@ import GuestRoute from './components/GuestRoute';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import PeerlyticsDashboard from './components/peerlytics-app';
+import VersionFooter from './components/VersionFooter';
 
 export default function App() {
   return (
+    <>
     <ErrorBoundary>
       <FirebaseGate>
       <FlagsProvider>
@@ -36,5 +38,7 @@ export default function App() {
       </FlagsProvider>
       </FirebaseGate>
     </ErrorBoundary>
+    <VersionFooter />
+    </>
   );
 }

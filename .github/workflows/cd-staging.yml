@@ -1,6 +1,8 @@
 name: CD staging
 
-# Step 1.9: every push to develop that passes CI is built and deployed to the staging server.
+# Step 1.9: every push to develop that passes CI is built and deployed to the staging server,
+# then checked: /api/health, the Playwright E2E tests (once step 5.8 adds them) and an OWASP ZAP
+# baseline scan. The Summary job reports tag, timings, rollback, E2E and ZAP.
 # workflow_dispatch redeploys an existing tag (rollback) or, without one, builds the chosen ref.
 # How it works and what to set up: docs/deploy.md.
 # Note: GitHub runs workflow_run workflows from the default branch, so this only fires once
@@ -32,7 +34,18 @@ jobs:
       sha: ${{ steps.what.outputs.sha }}
       tag: ${{ steps.what.outputs.tag }}
       build: ${{ steps.what.outputs.build }}
+      site_url: ${{ steps.site.outputs.url }}
     steps:
+      # The staging website on Pages; vars.STAGING_SITE_URL only if Pages has a custom domain.
+      - id: site
+        env:
+          OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          SITE_URL: ${{ vars.STAGING_SITE_URL }}
+        run: |
+          url="${SITE_URL:-https://${OWNER,,}.github.io/$REPO_NAME/}"
+          [[ "$url" == */ ]] || url="$url/"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
       - id: what
         env:
           EVENT: ${{ github.event_name }}
@@ -71,19 +84,28 @@ jobs:
     if: >-
       always() && needs.prepare.result == 'success' &&
       (needs.build.result == 'success' || needs.build.result == 'skipped')
-    runs-on: ubuntu-latest
+    # DEPLOY_MODE=local: the job runs on the self-hosted runner that is itself the server
+    # (docs/deploy.md, "Your PC as the server"). Otherwise a GitHub runner reaches it over SSH.
+    runs-on: ${{ vars.DEPLOY_MODE == 'local' && fromJSON('["self-hosted", "peerlytics-server"]') || 'ubuntu-latest' }}
     permissions:
       contents: read
       packages: read
     environment:
       name: staging
-      url: https://${{ vars.STAGING_DOMAIN }}/api/health
+      url: ${{ vars.DEPLOY_MODE == 'local' && 'http' || 'https' }}://${{ vars.STAGING_DOMAIN }}/api/health
     concurrency:
       group: deploy-staging
       cancel-in-progress: false
+    outputs:
+      result: ${{ steps.result.outputs.result }}
+      restored: ${{ steps.result.outputs.restored }}
+      live_at: ${{ steps.smoke.outputs.live_at }}
     env:
       TAG: ${{ needs.prepare.outputs.tag }}
       DOMAIN: ${{ vars.STAGING_DOMAIN }}
+      MODE: ${{ vars.DEPLOY_MODE || 'ssh' }}
+      # The PC as the server has no certificates: plain HTTP on *.localhost.
+      SCHEME: ${{ vars.DEPLOY_MODE == 'local' && 'http' || 'https' }}
       SSH_HOST: ${{ secrets.SSH_HOST }}
       SSH_USER: ${{ secrets.SSH_USER }}
     steps:
@@ -97,8 +119,14 @@ jobs:
       - name: Check the settings
         run: |
           missing=()
-          [[ -n "$SSH_HOST" ]] || missing+=(secret SSH_HOST)
-          [[ -n "$SSH_USER" ]] || missing+=(secret SSH_USER)
+          case "$MODE" in
+            ssh)
+              [[ -n "$SSH_HOST" ]] || missing+=(secret SSH_HOST)
+              [[ -n "$SSH_USER" ]] || missing+=(secret SSH_USER)
+              ;;
+            local) ;;
+            *) missing+=(variable DEPLOY_MODE: ssh or local) ;;
+          esac
           [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || missing+=(variable STAGING_DOMAIN)
           if (( ${#missing[@]} )); then
             echo "::error::Missing or invalid in the staging environment: ${missing[*]}"
@@ -106,6 +134,7 @@ jobs:
           fi
 
       - name: Set up SSH (strict host key checking)
+        if: vars.DEPLOY_MODE != 'local'
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
@@ -125,10 +154,19 @@ jobs:
           EOF
           chmod 600 ~/.ssh/config ~/.ssh/known_hosts
 
+      # on-server runs one shell command on the server: over SSH, or right here when this runner
+      # is the server (DEPLOY_MODE=local). stdin is passed through either way.
+      - name: Choose how to reach the server
+        run: |
+          # shellcheck disable=SC2016 # $1 is the helper's argument, not this step's
+          if [[ "$MODE" == local ]]; then run='exec bash -c "$1"'; else run='exec ssh peerlytics "$1"'; fi
+          printf '#!/usr/bin/env bash\n%s\n' "$run" > "$RUNNER_TEMP/on-server"
+          chmod 700 "$RUNNER_TEMP/on-server"
+
       - name: Copy the deploy files to the server
         run: |
           tar -C infra -czf - compose edge scripts \
-            | ssh peerlytics 'mkdir -p /opt/peerlytics/infra && tar -C /opt/peerlytics/infra -xzf -'
+            | "$RUNNER_TEMP/on-server" 'mkdir -p /opt/peerlytics/infra && tar -C /opt/peerlytics/infra -xzf -'
 
       - name: Log the server in to GHCR
         env:
@@ -136,60 +174,256 @@ jobs:
           ACTOR: ${{ github.actor }}
         # The token goes over stdin only; ACTOR is a GitHub login, expanded here on purpose.
         run: |
-          # shellcheck disable=SC2029
-          printf '%s' "$GH_TOKEN" | ssh peerlytics "docker login ghcr.io -u '$ACTOR' --password-stdin"
+          printf '%s' "$GH_TOKEN" | "$RUNNER_TEMP/on-server" "docker login ghcr.io -u '$ACTOR' --password-stdin"
 
       - name: Run deploy.sh staging
         env:
           OWNER: ${{ github.repository_owner }}
         # TAG was checked against the Docker tag pattern in "Decide what to deploy".
         run: |
-          # shellcheck disable=SC2029
-          ssh peerlytics "IMAGE_PREFIX=ghcr.io/${OWNER,,}/peerlytics bash /opt/peerlytics/infra/scripts/deploy.sh staging '$TAG'"
+          "$RUNNER_TEMP/on-server" "IMAGE_PREFIX=ghcr.io/${OWNER,,}/peerlytics bash /opt/peerlytics/infra/scripts/deploy.sh staging '$TAG'"
+
+      # deploy.sh writes result=ok|rolled_back|failed; no file means it stopped before deploying.
+      - name: Read the deploy result
+        id: result
+        if: always()
+        run: |
+          out="$("$RUNNER_TEMP/on-server" 'cat /opt/peerlytics/.last_deploy-staging 2> /dev/null' || true)"
+          result="$(sed -n 's/^result=\([a-z_]*\)$/\1/p' <<< "$out")"
+          restored="$(sed -n 's/^restored=\([A-Za-z0-9_.-]*\)$/\1/p' <<< "$out")"
+          echo "result=${result:-not_run}" >> "$GITHUB_OUTPUT"
+          echo "restored=$restored" >> "$GITHUB_OUTPUT"
 
       - name: Log the server out of GHCR
         if: always()
-        run: ssh peerlytics 'docker logout ghcr.io' || true
+        run: '"$RUNNER_TEMP/on-server" "docker logout ghcr.io" || true'
 
       - name: Smoke test /api/health
+        id: smoke
         run: |
           for i in $(seq 1 20); do
-            if body="$(curl -fsS --max-time 10 "https://$DOMAIN/api/health")" && grep -q '"ok":true' <<<"$body"; then
+            if body="$(curl -fsS --max-time 10 "$SCHEME://$DOMAIN/api/health")" && grep -q '"ok":true' <<<"$body"; then
               echo "$body"
+              echo "live_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             echo "Attempt $i: not healthy yet"
             sleep 6
           done
-          echo "::error::https://$DOMAIN/api/health did not answer ok"
+          echo "::error::$SCHEME://$DOMAIN/api/health did not answer ok"
           exit 1
 
-      # No OWASP ZAP job exists in this repository yet; add the baseline scan here when one does.
+      - name: Remove the SSH key and helper
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/on-server"
+          # Only the GitHub runner got a key; on the PC this would be the user's own file.
+          if [[ "$MODE" != local ]]; then rm -f ~/.ssh/deploy_key; fi
 
-      - name: Job summary
+  e2e:
+    name: End-to-end tests (Playwright)
+    needs: [prepare, deploy]
+    # always(): build may have been skipped (a redeploy), which would otherwise skip this job too.
+    if: always() && needs.deploy.result == 'success'
+    # *.localhost only answers on the PC, so in local mode the tests run there too.
+    runs-on: ${{ vars.DEPLOY_MODE == 'local' && fromJSON('["self-hosted", "peerlytics-server"]') || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+    outputs:
+      status: ${{ steps.status.outputs.status }}
+    env:
+      SHA: ${{ needs.prepare.outputs.sha }}
+      BASE_URL: ${{ needs.prepare.outputs.site_url }}
+      API_URL: ${{ vars.DEPLOY_MODE == 'local' && 'http' || 'https' }}://${{ vars.STAGING_DOMAIN }}
+      DOMAIN: ${{ vars.STAGING_DOMAIN }}
+      MODE: ${{ vars.DEPLOY_MODE || 'ssh' }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.prepare.outputs.sha || github.sha }}
+          persist-credentials: false
+
+      # Ngawang adds this script in step 5.8; until then the job passes with a warning.
+      - name: Is there an E2E script?
+        id: script
+        run: |
+          if grep -q '"test:e2e:staging"' package.json; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::package.json has no test:e2e:staging script yet (step 5.8); E2E skipped"
+            echo "> :warning: **E2E skipped:** package.json has no \`test:e2e:staging\` script yet (step 5.8)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # deploy-pages.yml runs in parallel; wait until Pages serves the website built from this commit.
+      - name: Wait for the staging website of this commit
+        if: steps.script.outputs.present == 'true' && env.SHA != ''
+        run: |
+          for i in $(seq 1 90); do
+            # The query string gets past the Pages CDN cache (max-age 600).
+            served="$(curl -fsS --max-time 10 "${BASE_URL}deploy-version.txt?t=$(date +%s)" 2> /dev/null || true)"
+            if [[ "$served" == "$SHA" ]]; then
+              echo "${BASE_URL} serves $SHA"
+              exit 0
+            fi
+            echo "Attempt $i: the website serves '${served:-nothing}', waiting for $SHA"
+            sleep 10
+          done
+          echo "::error::${BASE_URL} didn't serve $SHA within 15 minutes. Check the Deploy staging website run."
+          exit 1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: steps.script.outputs.present == 'true' && vars.DEPLOY_MODE != 'local'
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        if: steps.script.outputs.present == 'true' && vars.DEPLOY_MODE != 'local'
+        run: |
+          npm ci
+          npx playwright install --with-deps
+      # Local mode: Playwright's own image has the browser libraries, so the PC needs neither
+      # Node nor sudo. Host network, so http://<DOMAIN> reaches Caddy's published port.
+      - name: npm run test:e2e:staging
+        id: e2e
+        if: steps.script.outputs.present == 'true'
+        run: |
+          if [[ "$MODE" != local ]]; then
+            npm run test:e2e:staging
+            exit 0
+          fi
+          version="$(python3 -c "import json; print(json.load(open('package-lock.json'))['packages']['node_modules/@playwright/test']['version'])")"
+          docker run --rm --network host --add-host "$DOMAIN:127.0.0.1" \
+            -u "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true -e BASE_URL -e API_URL \
+            -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v$version-noble" \
+            sh -c 'npm ci --no-audit --no-fund && npm run test:e2e:staging'
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && steps.script.outputs.present == 'true'
+        with:
+          name: playwright-report-staging
+          path: playwright-report/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Result
+        id: status
         if: always()
         env:
-          SHA: ${{ needs.prepare.outputs.sha }}
-          MERGED_AT: ${{ github.event.workflow_run.head_commit.timestamp }}
-          JOB_STATUS: ${{ job.status }}
+          PRESENT: ${{ steps.script.outputs.present }}
+          OUTCOME: ${{ steps.e2e.outcome }}
         run: |
-          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          since="n/a (manual run)"
-          if [[ -n "$MERGED_AT" ]]; then
-            since="$(( ($(date -u +%s) - $(date -u -d "$MERGED_AT" +%s)) / 60 )) min"
+          if [[ "$PRESENT" != true ]]; then status=skipped
+          elif [[ "$OUTCOME" == success ]]; then status=passed
+          else status=failed
           fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+  zap:
+    name: OWASP ZAP baseline
+    needs: [prepare, deploy]
+    if: always() && needs.deploy.result == 'success'
+    runs-on: ${{ vars.DEPLOY_MODE == 'local' && fromJSON('["self-hosted", "peerlytics-server"]') || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+    env:
+      DOMAIN: ${{ vars.STAGING_DOMAIN }}
+    outputs:
+      alerts: ${{ steps.count.outputs.alerts }}
+      by_risk: ${{ steps.count.outputs.by_risk }}
+    steps:
+      # Passive scan only. It reports, it doesn't fail the deploy or open issues; the reports are
+      # the zap-baseline-staging artifact.
+      - uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
+        if: vars.DEPLOY_MODE != 'local'
+        with:
+          target: https://${{ vars.STAGING_DOMAIN }}/api/health
+          allow_issue_writing: false
+          fail_action: false
+          artifact_name: zap-baseline-staging
+      # Local mode: the same scan, by hand. The action starts ZAP with no way to add the host name,
+      # and it runs as root, leaving files on the PC the next run can't remove.
+      - name: ZAP baseline on this PC
+        if: vars.DEPLOY_MODE == 'local'
+        run: |
+          rm -f report_*
+          chmod a+w .
+          docker run --rm --network host --add-host "$DOMAIN:127.0.0.1" -v "$PWD:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af \
+            zap-baseline.py -t "http://$DOMAIN/api/health" -I \
+            -J report_json.json -w report_md.md -r report_html.html || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && vars.DEPLOY_MODE == 'local'
+        with:
+          name: zap-baseline-staging
+          path: report_*
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Count the warnings
+        id: count
+        if: always()
+        run: |
+          if [[ ! -f report_json.json ]]; then
+            echo "alerts=n/a" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Python, not jq: the PC in local mode has no jq.
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import json
+          risks = [int(a['riskcode']) for site in json.load(open('report_json.json'))['site'] for a in site['alerts']]
+          print(f'alerts={len(risks)}')
+          print('by_risk=' + ', '.join(f'{n} {risks.count(c)}' for n, c in [('High', 3), ('Medium', 2), ('Low', 1), ('Info', 0)]))
+          PY
+
+  summary:
+    name: Summary
+    needs: [prepare, build, deploy, e2e, zap]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+          DOMAIN: ${{ vars.STAGING_DOMAIN }}
+          SCHEME: ${{ vars.DEPLOY_MODE == 'local' && 'http' || 'https' }}
+          SITE_URL: ${{ needs.prepare.outputs.site_url }}
+          BUILD: ${{ needs.build.result }}
+          DEPLOY: ${{ needs.deploy.result }}
+          RESULT: ${{ needs.deploy.outputs.result }}
+          RESTORED: ${{ needs.deploy.outputs.restored }}
+          LIVE_AT: ${{ needs.deploy.outputs.live_at }}
+          E2E: ${{ needs.e2e.outputs.status || needs.e2e.result }}
+          ZAP_ALERTS: ${{ needs.zap.outputs.alerts || needs.zap.result }}
+          ZAP_BY_RISK: ${{ needs.zap.outputs.by_risk }}
+          CI_STARTED: ${{ github.event.workflow_run.run_started_at }}
+          MERGED_AT: ${{ github.event.workflow_run.head_commit.timestamp }}
+        run: |
+          minutes() { echo "$(( ($(date -u -d "$2" +%s) - $(date -u -d "$1" +%s)) / 60 )) min"; }
+          end="${LIVE_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+          pipeline="n/a (manual run)"; since="n/a (manual run)"
+          [[ -n "$CI_STARTED" ]] && pipeline="$(minutes "$CI_STARTED" "$end")"
+          [[ -n "$MERGED_AT" ]] && since="$(minutes "$MERGED_AT" "$end")"
+          case "$RESULT" in
+            ok) rollback=no ;;
+            rolled_back) rollback="yes, back on \`$RESTORED\`" ;;
+            failed) rollback="needed but not possible; staging needs a look" ;;
+            *) rollback="no (deploy.sh didn't run: build $BUILD)" ;;
+          esac
+          status=failed
+          [[ "$DEPLOY" == success && "$E2E" != failed ]] && status=live
           {
-            echo "### Staging deploy: $JOB_STATUS"
+            echo "### Staging deploy: $status"
             echo
             echo "| | |"
             echo "|---|---|"
             echo "| Tag | \`$TAG\` |"
             echo "| Commit | ${SHA:-n/a (redeploy of an existing tag)} |"
-            echo "| URL | https://$DOMAIN/api/health |"
-            echo "| Finished | $now |"
+            echo "| URL | $SCHEME://$DOMAIN/api/health |"
+            echo "| Finished | $end |"
+            echo "| Pipeline (CI start to live) | $pipeline |"
             echo "| Since the merge | $since |"
+            echo "| Rollback | $rollback |"
+            echo "| E2E | $E2E |"
+            echo "| ZAP baseline alerts | $ZAP_ALERTS${ZAP_BY_RISK:+ ($ZAP_BY_RISK)} |"
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Remove the SSH key
-        if: always()
-        run: rm -f ~/.ssh/deploy_key

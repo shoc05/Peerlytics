@@ -23,9 +23,11 @@ export const FILE_DIFFICULTY = {
   presentation: 1,
 };
 
-export const LOGO_SRC = '/logo.png';
-export const LOGO_DARK_SRC = '/logo2.png';
-// Icon-only mark (no wordmark). Drop /logo-mark.png and /logo-mark-dark.png into public/.
+// public/ files live under Vite's base ('/' or e.g. '/peerlytics/' on GitHub Pages).
+const BASE = import.meta.env?.BASE_URL ?? '/';
+export const LOGO_SRC = `${BASE}logo.png`;
+export const LOGO_DARK_SRC = `${BASE}logo2.png`;
+// Icon-only mark (no wordmark). Drop logo-mark.png and logo-mark-dark.png into public/.
 // Falls back to the wordmark logo until those files exist.
-export const LOGO_MARK_SRC = '/logo-mark.png';
-export const LOGO_MARK_DARK_SRC = '/logo-mark-dark.png';
+export const LOGO_MARK_SRC = `${BASE}logo-mark.png`;
+export const LOGO_MARK_DARK_SRC = `${BASE}logo-mark-dark.png`;
