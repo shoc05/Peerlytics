@@ -17,6 +17,16 @@ export default [
     },
   },
   {
+    // k6 load tests (load/). summary.js also runs under node:test.
+    ...js.configs.recommended,
+    files: ['load/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: { ...globals.node, __ENV: 'readonly', __VU: 'readonly', __ITER: 'readonly' },
+    },
+  },
+  {
     ...js.configs.recommended,
     files: ['src/**/*.{js,jsx}'],
     languageOptions: {
