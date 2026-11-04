@@ -2,17 +2,17 @@
 
 [![CI](https://github.com/shoc05/Peerlytics/actions/workflows/ci.yml/badge.svg)](https://github.com/shoc05/Peerlytics/actions/workflows/ci.yml)
 
-Production-ready academic collaboration platform with Firebase auth, Firestore data, TipTap workspace, and AI + plagiarism checks.
+Academic collaboration platform with Firebase auth, Firestore and PostgreSQL data, a TipTap workspace, and AI + plagiarism checks. Released as `v1.0.0`; see [Deployment](#deployment) for how it is hosted and what that limits.
 
 ## Features
 
 - **Firebase Authentication** — email/password signup and login with Student / Lecturer roles
-- **Firestore database** — users, projects (workspace = group), documents, versions, activity, analytics, reports, submissions, grades
+- **Firestore database** — users, groups (workspace = project = group), documents, versions, activity, analytics, reports, submissions, grades
 - **Invite-only projects** — new users see “No projects yet”; create a project or get invited (no default data)
 - **Lecturer gating** — lecturers only see projects after student submission
 - **Protected routes** — `/dashboard` requires login; unauthenticated users go to `/login`
 - **Workspace** — Google Docs–style TipTap editor with autosave, version history, paste detection
-- **Check & Submit** — backend EyeSift + AI scoring pipeline (`POST /api/check`)
+- **Check & Submit** — backend analysis with Hugging Face and Virtual Writing Tutor, plus paste events (`POST /api/check`). If a provider is unavailable, the submission still goes through. AI detection is a signal, not proof
 - **Lecturer tools** — analytics, submission reports, grade overrides (existing UI preserved)
 
 ## Setup
@@ -29,6 +29,8 @@ cd backend
 npm install
 cd ..
 ```
+
+The live-editing server in `collab/` is a third package and is only needed with the `yjs_enabled` flag on; see `collab/README.md`.
 
 Run this again **after every `git pull` that changes a `package.json`**. Otherwise Vite stops with errors like `Failed to resolve import "dompurify"`, and tests fail with `Cannot find package 'jsdom'`.
 
@@ -158,9 +160,9 @@ Then restart both terminals.
 | Collection | Purpose |
 |------------|---------|
 | `users/{uid}` | Profile: name, email, role, groupId |
-| `projects/{projectId}` | Project metadata, memberIds, lecturerIds, hasSubmissions |
-| `projects/{id}/folders`, `files`, `versions`, `activity`, `grades`, `pasteEvents` | Workspace & collaboration |
-| `analytics/{projectId}/members/{uid}` | Contribution metrics |
+| `groups/{groupId}` | Workspace metadata, memberIds, lecturerIds |
+| `groups/{id}/folders`, `files`, `versions`, `activity`, `pasteEvents`, `grades`, `overrides`, `feedback`, `notifications`, `presence` | Workspace & collaboration |
+| `analytics/{groupId}/members/{uid}` | Contribution metrics |
 | `documents/{fileId}` | HTML/text document bodies |
 | `reports/{reportId}` | AI + plagiarism reports |
 | `submissions/{fileId_uid}` | Locked submission records |
@@ -187,6 +189,41 @@ npm run preview
 ## API
 
 `POST /api/check` — body: `{ text, html, fileId, userId, groupId, fileName }` — returns structured integrity report.
+
+## Admin access
+
+There is no default admin account. To make the first `superAdmin`:
+
+1. Sign up normally, then copy your **User UID** from Firebase Console → Authentication → Users.
+2. From the repo root, with `FIREBASE_SERVICE_ACCOUNT` set in `.env`, run:
+
+   ```bash
+   node backend/src/auth/set-role.js <your-uid> superAdmin
+   ```
+
+3. Sign out and back in. You now get the **Admin · Grading Oversight** screen.
+
+After that, a superAdmin changes other users' roles through `POST /api/admin/users/:uid/role`. Nobody can change their own role. See `docs/auth-contract.md`.
+
+## College licensing
+
+Licensing is not finished. What exists is the `licences` table in PostgreSQL (plan, seats, monthly AI budget, start and end dates) and the `licensing_enabled` flag, which is off by default. There is no admin screen for licences and there are no payments, so a licence can only be set by hand in the database.
+
+## Deployment
+
+Staging and production both run on one PC, not a cloud VM: WSL2 Ubuntu with Docker Desktop and a GitHub self-hosted runner (`DEPLOY_MODE=local`). Full steps are in `docs/deploy.md`.
+
+| | Trigger | Website | API |
+|---|---|---|---|
+| **Staging** | CI passes on `develop` | https://shoc05.github.io/Peerlytics/ | `http://staging.localhost` |
+| **Production** | A `v*.*.*` tag on `main`, then approval | https://peerlytics-4367c.web.app | `http://prod.localhost` |
+
+Limits of this setup:
+
+- The API addresses only exist on that PC, so features that need the backend only work there, and only while it is on.
+- A deploy waits until the PC, Docker Desktop and the runner (`cd ~/actions-runner && ./run.sh` in Ubuntu) are all running.
+- On a free GitHub plan, the repository must be public for the staging website and the production approval step to work.
+- There is one machine and no high availability. Production's blue/green switch and `infra/scripts/rollback.sh prod` cover a bad release, not the PC going down.
 
 ## Direct pushes
 
