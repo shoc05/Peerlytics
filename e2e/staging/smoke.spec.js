@@ -3,11 +3,17 @@
 import { test, expect } from '@playwright/test';
 import { API_URL, BASE_PATH, BASE_URL, COLLAB_URL, E2E_TOKEN, HEALTH_URL } from './env.js';
 
-/** Collects console errors and uncaught page errors while a test runs. */
-function watchErrors(page) {
+/**
+ * Collects console errors and uncaught page errors while a test runs. A direct visit to an app route
+ * gets 404.html with status 404 from GitHub Pages, and the browser logs that; pass the route as
+ * `documentUrl` to ignore that one line. A 404 for any other file is still an error.
+ */
+function watchErrors(page, documentUrl) {
   const errors = [];
   page.on('console', (msg) => {
-    if (msg.type() === 'error') errors.push(`console: ${msg.text()}`);
+    if (msg.type() !== 'error') return;
+    if (msg.location().url === documentUrl && msg.text().includes('status of 404')) return;
+    errors.push(`console: ${msg.text()}`);
   });
   page.on('pageerror', (err) => errors.push(`pageerror: ${err.message}`));
   return errors;
@@ -26,7 +32,7 @@ test.describe('website under its sub-path', () => {
   });
 
   test('sign-in page loads, with no console errors', async ({ page }) => {
-    const errors = watchErrors(page);
+    const errors = watchErrors(page, `${BASE_URL}login`);
     await page.goto(`${BASE_URL}login`);
     await expect(page.locator('input[type="password"]')).toBeVisible();
     await expect(page).toHaveURL(`${BASE_URL}login`);
