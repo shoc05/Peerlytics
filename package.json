@@ -9,8 +9,9 @@
     "preview": "vite preview",
     "prepare": "git config core.hooksPath .githooks",
     "dev:server": "node backend/server.js",
-    "lint": "eslint src load",
-    "test": "node --test src/**/*.test.js load/*.test.js .github/scripts/*.test.cjs",
+    "lint": "eslint src e2e vite-plugins playwright.config.js",
+    "test": "node --test src/**/*.test.js vite-plugins/*.test.js .github/scripts/*.test.cjs",
+    "test:e2e:staging": "playwright test --project=staging",
     "test:rules": "firebase emulators:exec --only firestore --project demo-peerlytics \"node --test test/firestore.rules.test.js\"",
     "test:auth": "firebase emulators:exec --only auth,firestore --project demo-peerlytics \"node --test backend/src/auth/auth.emulator.itest.js\"",
     "test:deadlines": "firebase emulators:exec --only firestore --project demo-peerlytics \"node --test backend/src/jobs/deadlines/deadlines.emulator.itest.js\""
@@ -39,6 +40,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@firebase/rules-unit-testing": "^4.0.1",
+    "@playwright/test": "^1.56.1",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.0.0",
