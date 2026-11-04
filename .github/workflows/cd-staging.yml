@@ -188,7 +188,7 @@ jobs:
         id: result
         if: always()
         run: |
-          out="$(ssh peerlytics 'cat /opt/peerlytics/.last_deploy-staging 2> /dev/null' || true)"
+          out="$("$RUNNER_TEMP/on-server" 'cat /opt/peerlytics/.last_deploy-staging 2> /dev/null' || true)"
           result="$(sed -n 's/^result=\([a-z_]*\)$/\1/p' <<< "$out")"
           restored="$(sed -n 's/^restored=\([A-Za-z0-9_.-]*\)$/\1/p' <<< "$out")"
           echo "result=${result:-not_run}" >> "$GITHUB_OUTPUT"
@@ -213,16 +213,20 @@ jobs:
           echo "::error::$SCHEME://$DOMAIN/api/health did not answer ok"
           exit 1
 
-      - name: Remove the SSH key
+      - name: Remove the SSH key and helper
         if: always()
-        run: rm -f ~/.ssh/deploy_key
+        run: |
+          rm -f "$RUNNER_TEMP/on-server"
+          # Only the GitHub runner got a key; on the PC this would be the user's own file.
+          if [[ "$MODE" != local ]]; then rm -f ~/.ssh/deploy_key; fi
 
   e2e:
     name: End-to-end tests (Playwright)
     needs: [prepare, deploy]
     # always(): build may have been skipped (a redeploy), which would otherwise skip this job too.
     if: always() && needs.deploy.result == 'success'
-    runs-on: ubuntu-latest
+    # *.localhost only answers on the PC, so in local mode the tests run there too.
+    runs-on: ${{ vars.DEPLOY_MODE == 'local' && fromJSON('["self-hosted", "peerlytics-server"]') || 'ubuntu-latest' }}
     permissions:
       contents: read
     outputs:
@@ -230,7 +234,9 @@ jobs:
     env:
       SHA: ${{ needs.prepare.outputs.sha }}
       BASE_URL: ${{ needs.prepare.outputs.site_url }}
-      API_URL: https://${{ vars.STAGING_DOMAIN }}
+      API_URL: ${{ vars.DEPLOY_MODE == 'local' && 'http' || 'https' }}://${{ vars.STAGING_DOMAIN }}
+      DOMAIN: ${{ vars.STAGING_DOMAIN }}
+      MODE: ${{ vars.DEPLOY_MODE || 'ssh' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -241,7 +247,7 @@ jobs:
       - name: Is there an E2E script?
         id: script
         run: |
-          if node -e "process.exit(require('./package.json').scripts?.['test:e2e:staging'] ? 0 : 1)"; then
+          if grep -q '"test:e2e:staging"' package.json; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
@@ -267,19 +273,30 @@ jobs:
           exit 1
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        if: steps.script.outputs.present == 'true'
+        if: steps.script.outputs.present == 'true' && vars.DEPLOY_MODE != 'local'
         with:
           node-version: 22
           cache: npm
       - name: Install
-        if: steps.script.outputs.present == 'true'
+        if: steps.script.outputs.present == 'true' && vars.DEPLOY_MODE != 'local'
         run: |
           npm ci
           npx playwright install --with-deps
+      # Local mode: Playwright's own image has the browser libraries, so the PC needs neither
+      # Node nor sudo. Host network, so http://<DOMAIN> reaches Caddy's published port.
       - name: npm run test:e2e:staging
         id: e2e
         if: steps.script.outputs.present == 'true'
-        run: npm run test:e2e:staging
+        run: |
+          if [[ "$MODE" != local ]]; then
+            npm run test:e2e:staging
+            exit 0
+          fi
+          version="$(python3 -c "import json; print(json.load(open('package-lock.json'))['packages']['node_modules/@playwright/test']['version'])")"
+          docker run --rm --network host --add-host "$DOMAIN:127.0.0.1" \
+            -u "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true -e BASE_URL -e API_URL \
+            -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v$version-noble" \
+            sh -c 'npm ci --no-audit --no-fund && npm run test:e2e:staging'
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always() && steps.script.outputs.present == 'true'
@@ -306,9 +323,11 @@ jobs:
     name: OWASP ZAP baseline
     needs: [prepare, deploy]
     if: always() && needs.deploy.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.DEPLOY_MODE == 'local' && fromJSON('["self-hosted", "peerlytics-server"]') || 'ubuntu-latest' }}
     permissions:
       contents: read
+    env:
+      DOMAIN: ${{ vars.STAGING_DOMAIN }}
     outputs:
       alerts: ${{ steps.count.outputs.alerts }}
       by_risk: ${{ steps.count.outputs.by_risk }}
@@ -316,11 +335,30 @@ jobs:
       # Passive scan only. It reports, it doesn't fail the deploy or open issues; the reports are
       # the zap-baseline-staging artifact.
       - uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
+        if: vars.DEPLOY_MODE != 'local'
         with:
           target: https://${{ vars.STAGING_DOMAIN }}/api/health
           allow_issue_writing: false
           fail_action: false
           artifact_name: zap-baseline-staging
+      # Local mode: the same scan, by hand. The action starts ZAP with no way to add the host name,
+      # and it runs as root, leaving files on the PC the next run can't remove.
+      - name: ZAP baseline on this PC
+        if: vars.DEPLOY_MODE == 'local'
+        run: |
+          rm -f report_*
+          chmod a+w .
+          docker run --rm --network host --add-host "$DOMAIN:127.0.0.1" -v "$PWD:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af \
+            zap-baseline.py -t "http://$DOMAIN/api/health" -I \
+            -J report_json.json -w report_md.md -r report_html.html || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && vars.DEPLOY_MODE == 'local'
+        with:
+          name: zap-baseline-staging
+          path: report_*
+          if-no-files-found: warn
+          retention-days: 14
       - name: Count the warnings
         id: count
         if: always()
@@ -329,10 +367,13 @@ jobs:
             echo "alerts=n/a" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          echo "alerts=$(jq '[.site[].alerts[]] | length' report_json.json)" >> "$GITHUB_OUTPUT"
-          by_risk="$(jq -r '[.site[].alerts[].riskcode | tonumber] as $r
-            | "High \([$r[] | select(. == 3)] | length), Medium \([$r[] | select(. == 2)] | length), Low \([$r[] | select(. == 1)] | length), Info \([$r[] | select(. == 0)] | length)"' report_json.json)"
-          echo "by_risk=$by_risk" >> "$GITHUB_OUTPUT"
+          # Python, not jq: the PC in local mode has no jq.
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import json
+          risks = [int(a['riskcode']) for site in json.load(open('report_json.json'))['site'] for a in site['alerts']]
+          print(f'alerts={len(risks)}')
+          print('by_risk=' + ', '.join(f'{n} {risks.count(c)}' for n, c in [('High', 3), ('Medium', 2), ('Low', 1), ('Info', 0)]))
+          PY
 
   summary:
     name: Summary
@@ -345,6 +386,7 @@ jobs:
           TAG: ${{ needs.prepare.outputs.tag }}
           SHA: ${{ needs.prepare.outputs.sha }}
           DOMAIN: ${{ vars.STAGING_DOMAIN }}
+          SCHEME: ${{ vars.DEPLOY_MODE == 'local' && 'http' || 'https' }}
           SITE_URL: ${{ needs.prepare.outputs.site_url }}
           BUILD: ${{ needs.build.result }}
           DEPLOY: ${{ needs.deploy.result }}
@@ -385,10 +427,3 @@ jobs:
             echo "| E2E | $E2E |"
             echo "| ZAP baseline alerts | $ZAP_ALERTS${ZAP_BY_RISK:+ ($ZAP_BY_RISK)} |"
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Remove the SSH key and helper
-        if: always()
-        run: |
-          rm -f "$RUNNER_TEMP/on-server"
-          # Only the GitHub runner got a key; on the PC this would be the user's own file.
-          if [[ "$MODE" != local ]]; then rm -f ~/.ssh/deploy_key; fi
