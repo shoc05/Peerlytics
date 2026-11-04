@@ -220,6 +220,8 @@ jobs:
         env:
           VITE_API_URL: ${{ vars.VITE_API_URL_PROD }}
           VITE_COLLAB_URL: ${{ vars.VITE_COLLAB_URL_PROD }}
+          # The footer's "Version <tag>" line (step 5.8).
+          VITE_APP_VERSION: ${{ github.ref_name }}
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}

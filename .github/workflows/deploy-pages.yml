@@ -42,6 +42,8 @@ jobs:
           VITE_BASE: /${{ github.event.repository.name }}/
           VITE_API_URL: ${{ vars.VITE_API_URL_STAGING }}
           VITE_COLLAB_URL: ${{ vars.VITE_COLLAB_URL_STAGING }}
+          # The footer's "Version <sha>" line (step 5.8); the website shortens it to 7 characters.
+          VITE_APP_VERSION: ${{ github.event.workflow_run.head_sha || github.sha }}
           # The Firebase web config is public (it ships in every page), so it lives in variables.
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}

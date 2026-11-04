@@ -98,7 +98,7 @@ Everything lives in `/opt/peerlytics`, owned by `deploy`. Names only; the values
 | Secret | `FIREBASE_SERVICE_ACCOUNT_PEERLYTICS_4367C` | JSON key of a service account with the **Firebase Hosting Admin** role in `peerlytics-4367c` (`firebase init hosting:github` creates one under this name) |
 | Variable | `PROD_DOMAIN` | e.g. `peerlytics.duckdns.org` |
 | Variable | `VITE_API_URL_PROD` | `https://<PROD_DOMAIN>` |
-| Variable | `VITE_COLLAB_URL_PROD` | `wss://<PROD_DOMAIN>/collab` (empty keeps live editing off) |
+| Variable | `VITE_COLLAB_URL_PROD` | `wss://<PROD_DOMAIN>/collab`. Empty: the website uses `VITE_API_URL_PROD` with `/collab` (`https`→`wss`). Live editing still needs the `yjs_enabled` flag |
 
 The production environment already has **required reviewers**, so a release waits for one of them to approve it. Public repositories get environment protection on every plan, so no extra approval gate is needed. Also set **Deployment branches and tags** to the tag pattern `v*.*.*`, so only version tags can use the environment's secrets.
 
@@ -107,7 +107,7 @@ The production environment already has **required reviewers**, so a release wait
 | Name | Value |
 |---|---|
 | `VITE_API_URL_STAGING` | `https://<STAGING_DOMAIN>` |
-| `VITE_COLLAB_URL_STAGING` | `wss://<STAGING_DOMAIN>/collab` (empty keeps live editing off) |
+| `VITE_COLLAB_URL_STAGING` | `wss://<STAGING_DOMAIN>/collab`. Empty: the website uses `VITE_API_URL_STAGING` with `/collab` (`https`→`wss`). Live editing still needs the `yjs_enabled` flag |
 | `STAGING_SITE_URL` | Optional. Only if Pages has a custom domain; the default is `https://<owner>.github.io/<repo>/` |
 | `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID` | The Firebase web config. It ships in every page, so it isn't a secret |
 | `DEPLOY_MODE` | Optional. `ssh` (default, a cloud VM) or `local` (your PC with a self-hosted runner, see above) |
