@@ -43,6 +43,10 @@ The deploy jobs run on your PC instead of on GitHub. The images are still built 
 
 The websites are still on GitHub Pages and Firebase Hosting. They call the API on `*.localhost`, which browsers send to your own PC and allow from an HTTPS page. Chrome may ask once whether the site may reach devices on your local network; allow it. Rollbacks run in Ubuntu: `bash /opt/peerlytics/infra/scripts/rollback.sh prod`.
 
+After a staging deploy, the E2E tests and the ZAP baseline run on the same runner, in Docker (Playwright's and ZAP's own images), against `http://staging.localhost`. The PC needs neither Node nor jq for them. k6 ([cd-evidence.md](cd-evidence.md)) also has to run on this PC, with `BASE_URL=http://staging.localhost` or `http://prod.localhost`.
+
+Caddy needs port 80 on Windows. If `deploy.sh` stops with "ports are not available" or `bind`, another program has it. Check in PowerShell with `netstat -ano | findstr :80`. PID 4 is usually IIS: as Administrator, `iisreset /stop` and `Set-Service W3SVC -StartupType Manual` (`iisreset /start` turns it back on).
+
 To show the staging API to someone else for a while, a Cloudflare quick tunnel needs no account: `cloudflared tunnel --url http://localhost:80 --http-host-header staging.localhost` prints a temporary `https://….trycloudflare.com` address. The website build has the API address baked in, so the website itself still calls `staging.localhost`.
 
 ## 1. Set up the server

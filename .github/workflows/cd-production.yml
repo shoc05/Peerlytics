@@ -181,7 +181,7 @@ jobs:
         id: result
         if: always()
         run: |
-          out="$(ssh peerlytics 'cat /opt/peerlytics/.last_deploy-prod /opt/peerlytics/.active_color-prod 2> /dev/null' || true)"
+          out="$("$RUNNER_TEMP/on-server" 'cat /opt/peerlytics/.last_deploy-prod /opt/peerlytics/.active_color-prod 2> /dev/null' || true)"
           result="$(sed -n 's/^result=\([a-z_]*\)$/\1/p' <<< "$out")"
           restored="$(sed -n 's/^restored=\([A-Za-z0-9_.-]*\)$/\1/p' <<< "$out")"
           colour="$(grep -xE 'blue|green' <<< "$out" || true)"
@@ -293,6 +293,8 @@ jobs:
           TAG: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
           DOMAIN: ${{ vars.PROD_DOMAIN }}
+          MODE: ${{ vars.DEPLOY_MODE || 'ssh' }}
+          SCHEME: ${{ vars.DEPLOY_MODE == 'local' && 'http' || 'https' }}
           BUILD: ${{ needs.build.result }}
           DEPLOY: ${{ needs.deploy.result }}
           RELEASE: ${{ needs.release.result }}
@@ -327,7 +329,7 @@ jobs:
             echo "|---|---|"
             echo "| Tag | \`$TAG\` |"
             echo "| Commit | $SHA |"
-            echo "| API | https://$DOMAIN/api/health (backend_${COLOUR:-?}, healthy at ${API_LIVE_AT:-n/a}) |"
+            echo "| API | $SCHEME://$DOMAIN/api/health (backend_${COLOUR:-?}, healthy at ${API_LIVE_AT:-n/a}) |"
             echo "| Website | ${SITE_URL:-n/a} |"
             echo "| Live at | ${LIVE_AT:-not live} |"
             echo "| Pipeline (tag to live) | $pipeline |"
@@ -336,5 +338,9 @@ jobs:
             echo "| Since the merge | $since |"
             echo "| Rollback | $rollback |"
             echo "| GitHub release | $RELEASE |"
-            echo "| Roll back by hand | \`ssh deploy@<server> /opt/peerlytics/infra/scripts/rollback.sh prod\` |"
+            if [[ "$MODE" == local ]]; then
+              echo "| Roll back by hand | \`bash /opt/peerlytics/infra/scripts/rollback.sh prod\` in WSL |"
+            else
+              echo "| Roll back by hand | \`ssh deploy@<server> /opt/peerlytics/infra/scripts/rollback.sh prod\` |"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
