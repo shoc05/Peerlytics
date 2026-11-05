@@ -6,6 +6,11 @@
 
 {
 	email {$ACME_EMAIL}
+	# Behind the tunnel (infra/edge/tunnel) Caddy's peer is a container, so keep its
+	# X-Forwarded-For. Otherwise every visitor looks the same to the rate limits.
+	servers {
+		trusted_proxies static private_ranges
+	}
 }
 
 (common) {

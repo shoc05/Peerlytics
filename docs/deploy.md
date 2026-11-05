@@ -49,6 +49,19 @@ Caddy needs port 80 on Windows. If `deploy.sh` stops with "ports are not availab
 
 To show the staging API to someone else for a while, a Cloudflare quick tunnel needs no account: `cloudflared tunnel --url http://localhost:80 --http-host-header staging.localhost` prints a temporary `https://….trycloudflare.com` address. The website build has the API address baked in, so the website itself still calls `staging.localhost`.
 
+### A public address for your PC (Tailscale Funnel)
+
+Without this, the API only works on the PC itself. With it, anyone can reach the production API at a fixed `https://peerlytics.<your-tailnet>.ts.net`, while the PC, Docker Desktop and the tunnel are running. No router ports are opened. Only production gets an address; staging stays on this PC.
+
+1. Create a free account at [tailscale.com](https://login.tailscale.com/start).
+2. In the admin console, turn on **HTTPS Certificates** (DNS page) and allow **Funnel** in the access controls for this device. The console explains both.
+3. Under **Settings → Keys**, generate an auth key. Don't paste it in chat or commit it.
+4. In Ubuntu: `bash /opt/peerlytics/infra/scripts/setup-tunnel.sh`. It asks for the key and prints the address.
+5. Set the repository variables `VITE_API_URL_PROD` to `https://<that address>` and `VITE_COLLAB_URL_PROD` to `wss://<that address>/collab`, then release. The website needs a new build to use them. Keep `PROD_DOMAIN` as `prod.localhost`; the deploy checks use it on the PC.
+6. In the admin console, turn off **key expiry** for this device, or the tunnel stops when the key expires.
+
+**Limits.** It is not a substitute for a real server: the site is down whenever the PC is off or asleep, and home internet speed and Funnel's bandwidth limits apply. Anything on the production API is now reachable from the internet, so every route needs its sign-in check.
+
 ## 1. Set up the server
 
 1. Create the VM: Ubuntu Server 24.04 LTS x64, size B2s (2 vCPU, 4 GB; staging and production together need about 2.5 GB), SSH key login, admin user `azureuser`. In its **network security group**, allow inbound TCP 22, 80 and 443 from any source. GitHub's runners have no fixed address, and only keys can log in. Make the public IP **static** so it survives a stop and start. Stopping (deallocating) the VM when nobody needs it saves most of the credit.

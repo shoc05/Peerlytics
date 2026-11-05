@@ -8,6 +8,8 @@ printf '%s\n' "$*" >> "$CALLS"
 case " $* " in
   # deploy.sh asks the backend image whether it has a migrate:up script; this one has none.
   *" run "*) exit 1 ;;
+  # setup-tunnel.sh reads the tunnel's public name
+  *" status "*) printf '{ "Self": { "DNSName": "peerlytics.example.ts.net." } }\n' ;;
   *" up "*)
     service="${*: -1}"
     tag="${TAG:-}"

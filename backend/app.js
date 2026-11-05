@@ -42,7 +42,7 @@ function rateLimit({ windowMs = 60_000, max = 20 } = {}) {
 export function createApp({ config, db, metrics = createMetrics(), getClients = getAdmin }) {
   const app = express();
 
-  app.set('trust proxy', 1); // correct req.ip behind Render/hosting proxies (for rate limiting)
+  app.set('trust proxy', config.trustProxyHops); // correct req.ip behind proxies (for rate limiting)
   // Prometheus: count and time every request; GET /metrics for the cluster (step 5.3).
   app.use(metrics.middleware);
   app.use(metrics.router());

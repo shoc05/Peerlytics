@@ -14,6 +14,9 @@ describe('loadConfig', () => {
   });
 
   test('RUN_JOBS=false turns the background jobs off; other values are rejected', () => {
+    assert.equal(loadConfig({}).trustProxyHops, 1);
+    assert.equal(loadConfig({ TRUST_PROXY_HOPS: '2' }).trustProxyHops, 2);
+    assert.throws(() => loadConfig({ TRUST_PROXY_HOPS: 'many' }), /TRUST_PROXY_HOPS/);
     assert.equal(loadConfig({ RUN_JOBS: 'false' }).runJobs, false);
     assert.equal(loadConfig({ RUN_JOBS: 'true' }).runJobs, true);
     assert.equal(loadConfig({ RUN_JOBS: '' }).runJobs, true);
