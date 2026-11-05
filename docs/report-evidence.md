@@ -39,10 +39,10 @@ Measured on 5 November 2026 from this repository, `gh`, test runs and the live s
 | 3.7 Security | Open dependency issues | Website 5 high, 31 moderate. Backend 8 high, 8 moderate. Collab 6 moderate | `npm audit --omit=dev` | Run locally |
 | 3.7 Security | ZAP warnings | High 0, medium 0, low 1, informational 1 | `zap-baseline-staging` artifact, run 41861413147 | Low: `X-Powered-By`. Informational: "Storable and Cacheable Content". Passive scan of `/api/health` only |
 | 3.7 Security | What was fixed | Not yet: these checks were new, and every FAIL is still open | `docs/release-check.md` | |
-| 3.9 Acceptance | Release check counts | 11 PASS, 8 FAIL, 7 NEEDS SANGAY (26 checks) | `docs/release-check.md` | Counted |
+| 3.9 Acceptance | Release check counts | 12 PASS, 8 FAIL, 6 NEEDS SANGAY (26 checks) | `docs/release-check.md` | Counted |
 | 3.9 Acceptance | Acceptance test results | not measured: `docs/acceptance-test.md` does not exist | Repository | |
 | Abstract, conclusion | Production release | `v1.0.0`, 4 November 2026 | As above | |
-| Abstract, conclusion | Checks passed out of total | 11 of 26 | `docs/release-check.md` | 7 are not yet decided |
+| Abstract, conclusion | Checks passed out of total | 12 of 26 | `docs/release-check.md` | 6 are not yet decided |
 | Abstract, conclusion | Features cut | 4 of 7 advanced features have a flag that no code reads: push, CSV invite, .docx, licensing | `git grep` for each flag name in `src`, `backend`, `collab` | Yjs, offline and document tabs do read their flags. Searched in code only, not run with the flags on. Peer evaluation, course dashboard, Dzongkha and `ai_provider` also have unread flags |
 | Leave for Sangay | Jira items completed out of 66, and carried over | NEEDS SANGAY | Jira | |
 | Leave for Sangay | Burndown charts | NEEDS SANGAY | Jira | |
@@ -90,7 +90,7 @@ A release check was carried out against the staging and production services. Req
 
 ### 3.9 Release check
 
-`docs/release-check.md` lists 26 checks covering authentication, authorisation, rate limiting, cross-origin rules, security headers, secrets, dependency issues, the delivery pipeline and recovery. Of these, 11 passed, 8 failed and 7 need a further manual step. Each failure has a suggested fix in that document. `docs/acceptance-test.md` was not produced.
+`docs/release-check.md` lists 26 checks covering authentication, authorisation, rate limiting, cross-origin rules, security headers, secrets, dependency issues, the delivery pipeline and recovery. Of these, 12 passed, 8 failed and 6 need a further manual step. Each failure has a suggested fix in that document. `docs/acceptance-test.md` was not produced.
 
 ### 3.10 Limitations (new points)
 
@@ -186,4 +186,4 @@ The wording of LO1 to LO8 is not in the repository, so the LO column is NEEDS SA
 - Screenshot captions for 2.3, 3.4 to 3.9, 3.11, 3.12 and 3.14 to 3.20
 - All screenshots
 - Rollback run link (needs the second release)
-- Release checks 20 to 26 in `docs/release-check.md`
+- Release checks 20 to 24 and 26 in `docs/release-check.md`

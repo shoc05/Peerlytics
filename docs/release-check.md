@@ -8,9 +8,9 @@ NEEDS SANGAY means it can't be measured from the repository alone, or depends on
 
 | Result | Count |
 |---|---|
-| PASS | 11 |
+| PASS | 12 |
 | FAIL | 8 |
-| NEEDS SANGAY | 7 |
+| NEEDS SANGAY | 6 |
 | Total | 26 |
 
 ## Results
@@ -41,7 +41,7 @@ NEEDS SANGAY means it can't be measured from the repository alone, or depends on
 | 22 | Blue/green switch with no failed requests | NEEDS SANGAY | Green has never run, so no switch has happened. Needs a second release, approved by Sangay, while k6 runs |
 | 23 | Rollback drill | NEEDS SANGAY | `rollback.sh` needs green to have run. Same second release as check 22 |
 | 24 | Sign-in and backend work from the production website | NEEDS SANGAY | The page loads (200), but nobody has confirmed a signed-in session. Sign in on the server PC and submit a test document |
-| 25 | Admin screen opens for a superAdmin | NEEDS SANGAY | The role is set on the account, but Firebase showed no sign-in after that. Sign in with Google on that account and take a screenshot |
+| 25 | Admin screen opens for a superAdmin | PASS | Sangay's screenshot on 5 November 2026: `peerlytics-4367c.web.app/dashboard` shows Admin · Grading Oversight with no error. A superAdmin gets only this read-only page; there is no licence or subscription screen |
 | 26 | Signed-in E2E test | NEEDS SANGAY | Skipped because `E2E_TOKEN` is not set |
 
 ## Suggested fixes for each FAIL
