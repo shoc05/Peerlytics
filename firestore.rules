@@ -54,7 +54,21 @@
 
       // Fields only the backend (Admin SDK) may write on a group.
       function serverOnlyGroupFields() {
-        return ['locked', 'lockedAt', 'lockedBy', 'lockedDeadline', 'autoSubmit', 'extendedDeadline', 'extension'];
+        return ['locked', 'lockedAt', 'lockedBy', 'lockedDeadline', 'autoSubmit', 'extendedDeadline', 'extension', 'courseId', 'assignmentId'];
+      }
+
+      // The courses_v2 flag, copied here by the backend because rules can't read Remote Config.
+      // On: workspaces are created only by the backend, inside a course project.
+      function coursesV2() {
+        let path = /databases/$(database)/documents/config/flags;
+        return exists(path) && get(path).data.get('courses_v2', false) == true;
+      }
+
+      // A course workspace's people, name and deadline follow PostgreSQL, so only the backend
+      // changes them. Standalone workspaces have no courseId and stay as they were.
+      function courseGroupFieldsUntouched() {
+        return resource.data.get('courseId', null) == null ||
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['memberIds', 'lecturerIds', 'name', 'deadline']);
       }
 
       function touchesServerOnlyGroupFields() {
@@ -152,6 +166,7 @@
         // The creator must be in the group, nothing starts submitted, and the lock fields are
         // the server's.
         allow create: if signedIn() &&
+          !coursesV2() &&
           (request.auth.uid in request.resource.data.memberIds ||
             request.auth.uid in request.resource.data.lecturerIds) &&
           request.resource.data.get('submittedToLecturers', []).size() == 0 &&
@@ -161,11 +176,14 @@
         allow update: if signedIn() &&
           (request.auth.uid in resource.data.memberIds || request.auth.uid in resource.data.lecturerIds) &&
           !touchesServerOnlyGroupFields() &&
+          courseGroupFieldsUntouched() &&
           submittedToLecturersChangeAllowed();
         // Use resource.data directly to avoid a circular get() on the same doc being deleted.
-        // Any member may delete the workspace until it is locked at the deadline.
+        // Any member may delete a standalone workspace until it is locked at the deadline. A
+        // course workspace is removed only through the backend.
         allow delete: if signedIn() &&
           (request.auth.uid in resource.data.memberIds || request.auth.uid in resource.data.lecturerIds) &&
+          resource.data.get('courseId', null) == null &&
           resource.data.get('locked', false) != true;
 
         match /folders/{folderId} {
@@ -320,6 +338,11 @@
           isMemberOfGroup(request.resource.data.groupId) &&
           !groupLocked(request.resource.data.groupId);
         allow update, delete: if false;
+      }
+
+      // Settings the backend copies here for these rules (see coursesV2). No client access.
+      match /config/{docId} {
+        allow read, write: if false;
       }
 
       // Who did what, when and why (deadline extensions, step 4.6). Written by the backend

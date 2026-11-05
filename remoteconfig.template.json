@@ -40,6 +40,11 @@
       "valueType": "BOOLEAN",
       "description": "Export documents as .docx."
     },
+    "courses_v2": {
+      "defaultValue": { "value": "false" },
+      "valueType": "BOOLEAN",
+      "description": "Courses: the Courses tab and API, and workspaces created only inside a course project."
+    },
     "licensing_enabled": {
       "defaultValue": { "value": "false" },
       "valueType": "BOOLEAN",

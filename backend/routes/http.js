@@ -6,6 +6,7 @@ import { zodDetails } from '../src/auth/errors.js';
 const MESSAGES = {
   INVALID_BODY: 'The request is not valid.',
   NOT_FOUND: 'Not found.',
+  FEATURE_DISABLED: 'This feature is not turned on.',
   FORBIDDEN: 'You do not have permission to do this.',
   CONFLICT: 'That conflicts with something that already exists.',
   INVALID_JOIN_CODE: 'No course has that join code. Check it with your lecturer.',

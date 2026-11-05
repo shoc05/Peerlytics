@@ -50,6 +50,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { courseApi } from '../api';
+import { useFlag } from '../flags/FlagsProvider';
 import { isCourseApiReady } from '../courses/courseApi';
 import { logOut } from '../firebase/authService';
 import { createActivityEntry, formatRelativeTime, formatDuration, formatDate, formatDateTime } from '../utils/workspaceHelpers';
@@ -149,6 +150,7 @@ function formatSecondsExact(totalSeconds) {
 const PeerlyticsDashboard = () => {
   const navigate = useNavigate();
   const { user: currentUser, isLecturer, isAdmin, refreshProfile } = useAuth();
+  const coursesV2 = useFlag('courses_v2');
   const [darkMode, setDarkMode] = useState(() => {
     try {
       return localStorage.getItem('peerlytics-theme') === 'dark';
@@ -1210,7 +1212,7 @@ const PeerlyticsDashboard = () => {
           {[
             { id: 'projects', label: t('projects'), icon: NavIconProjects },
             // Courses (step 1.7) stays visible but marked until the course API exists.
-            { id: 'courses', label: t('courses'), icon: NavIconCourses, note: isCourseApiReady(courseApi) ? null : t('notAvailableYet') },
+            { id: 'courses', label: t('courses'), icon: NavIconCourses, note: coursesV2 && isCourseApiReady(courseApi) ? null : t('notAvailableYet') },
             // Analytics is not in the main nav: students don't get it at all, and for
             // lecturers it lives in "Analytics Tools" as "Analysis".
             { id: 'storage', label: t('storage'), icon: NavIconStorage },
@@ -2389,7 +2391,7 @@ const PeerlyticsDashboard = () => {
           {/* COURSES (step 1.7) */}
           {activeTab === 'courses' && (
             <CoursesPanel
-              api={courseApi}
+              api={coursesV2 ? courseApi : null}
               language={language}
               darkMode={darkMode}
               isLecturer={isLecturer}

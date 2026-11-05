@@ -466,3 +466,114 @@ test('the group reads feedback but cannot change it; the author edits or deletes
   await assertSucceeds(update(doc(lecturer(), 'groups/acc-g/feedback/fb2'), { comment: 'Cite the 2023 report.' }));
   await assertSucceeds(deleteDoc(doc(lecturer(), 'groups/acc-g/feedback/fb2')));
 });
+
+// ── Step 6.3: course workspaces and the courses_v2 flag ──
+async function seedCourseWorkspaces() {
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'groups/course-a'), {
+      name: 'Team A',
+      deadline: '2099-01-01T00:00:00.000Z',
+      courseId: 'course-1',
+      assignmentId: 'project-1',
+      memberIds: ['student-a'],
+      lecturerIds: ['course-lecturer'],
+      submittedToLecturers: [],
+    });
+    await setDoc(doc(db, 'groups/course-a/files/file-a'), { name: 'draft' });
+    await setDoc(doc(db, 'groups/course-b'), {
+      courseId: 'course-1',
+      assignmentId: 'project-1',
+      memberIds: ['student-b'],
+      lecturerIds: ['course-lecturer'],
+      submittedToLecturers: [],
+    });
+    await setDoc(doc(db, 'groups/course-b/files/file-b'), { name: 'draft' });
+  });
+}
+
+const setCoursesV2 = (on) =>
+  testEnvironment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), 'config/flags'), { courses_v2: on }));
+
+const lecturerDb = () => testEnvironment.authenticatedContext('course-lecturer', { role: 'lecturer' }).firestore();
+const studentDb = (uid) => testEnvironment.authenticatedContext(uid, { role: 'student' }).firestore();
+const newGroup = (uid) => ({ memberIds: [uid], lecturerIds: [], submittedToLecturers: [] });
+
+test('a student not in a course workspace can read neither it nor its files', async () => {
+  await seedCourseWorkspaces();
+  const db = studentDb('not-enrolled');
+  await assertFails(getDoc(doc(db, 'groups/course-a')));
+  await assertFails(getDoc(doc(db, 'groups/course-a/files/file-a')));
+});
+
+test('a student reads their own group and not another group in the same project', async () => {
+  await seedCourseWorkspaces();
+  const db = studentDb('student-a');
+  await assertSucceeds(getDoc(doc(db, 'groups/course-a/files/file-a')));
+  await assertFails(getDoc(doc(db, 'groups/course-b')));
+  await assertFails(getDoc(doc(db, 'groups/course-b/files/file-b')));
+});
+
+test('the course lecturer cannot read workspace content before submission', async () => {
+  await seedCourseWorkspaces();
+  await assertSucceeds(getDoc(doc(lecturerDb(), 'groups/course-a')));
+  await assertFails(getDoc(doc(lecturerDb(), 'groups/course-a/files/file-a')));
+});
+
+test('a collegeAdmin cannot read a course workspace or its content', async () => {
+  await seedCourseWorkspaces();
+  const db = testEnvironment.authenticatedContext('college-admin', { role: 'collegeAdmin' }).firestore();
+  await assertFails(getDoc(doc(db, 'groups/course-a')));
+  await assertFails(getDoc(doc(db, 'groups/course-a/files/file-a')));
+});
+
+test('clients cannot change who is in a course workspace, or its name or deadline', async () => {
+  await seedCourseWorkspaces();
+  const student = doc(studentDb('student-a'), 'groups/course-a');
+  await assertFails(updateDoc(student, { memberIds: arrayUnion('friend') }));
+  await assertFails(updateDoc(student, { lecturerIds: arrayUnion('other-lecturer') }));
+  await assertFails(updateDoc(student, { name: 'Renamed' }));
+  await assertFails(updateDoc(student, { deadline: '2100-01-01T00:00:00.000Z' }));
+  await assertFails(updateDoc(doc(lecturerDb(), 'groups/course-a'), { memberIds: arrayUnion('friend') }));
+});
+
+test('clients cannot set or move a workspace\'s course or project', async () => {
+  await seedCourseWorkspaces();
+  await assertFails(updateDoc(doc(studentDb('student-a'), 'groups/course-a'), { courseId: 'course-2' }));
+  await assertFails(updateDoc(doc(studentDb('student-1'), 'groups/group-1'), { courseId: 'course-1' }));
+  await assertFails(setDoc(doc(studentDb('student-z'), 'groups/made-up'), { ...newGroup('student-z'), courseId: 'course-1' }));
+});
+
+test('clients cannot delete a course workspace, but can still hand it in', async () => {
+  await seedCourseWorkspaces();
+  await assertFails(deleteDoc(doc(studentDb('student-a'), 'groups/course-a')));
+  await assertFails(deleteDoc(doc(lecturerDb(), 'groups/course-a')));
+  await assertSucceeds(updateDoc(doc(studentDb('student-a'), 'groups/course-a'), { submittedToLecturers: arrayUnion('course-lecturer') }));
+  await assertSucceeds(getDoc(doc(lecturerDb(), 'groups/course-a/files/file-a')));
+});
+
+test('with courses_v2 off or unset, browsers can still create standalone workspaces', async () => {
+  await assertSucceeds(setDoc(doc(studentDb('student-y'), 'groups/standalone-1'), newGroup('student-y')));
+  await setCoursesV2(false);
+  await assertSucceeds(setDoc(doc(studentDb('student-y'), 'groups/standalone-2'), newGroup('student-y')));
+});
+
+test('with courses_v2 on, browsers cannot create a workspace, and existing ones keep working', async () => {
+  await setCoursesV2(true);
+  try {
+    await assertFails(setDoc(doc(studentDb('student-y'), 'groups/standalone-3'), newGroup('student-y')));
+    await assertFails(setDoc(doc(lecturerDb(), 'groups/standalone-4'), { memberIds: [], lecturerIds: ['course-lecturer'], submittedToLecturers: [] }));
+    await assertSucceeds(getDoc(doc(studentDb('student-y'), 'groups/standalone-1')));
+    await assertSucceeds(setDoc(doc(studentDb('student-y'), 'groups/standalone-1/files/f1'), { name: 'kept working' }));
+    await assertSucceeds(deleteDoc(doc(studentDb('student-y'), 'groups/standalone-2')));
+  } finally {
+    await setCoursesV2(false);
+  }
+});
+
+test('no client reads or writes config/flags', async () => {
+  const db = studentDb('student-y');
+  await assertFails(getDoc(doc(db, 'config/flags')));
+  await assertFails(setDoc(doc(db, 'config/flags'), { courses_v2: false }));
+  await assertFails(setDoc(doc(lecturerDb(), 'config/flags'), { courses_v2: true }));
+});
