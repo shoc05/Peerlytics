@@ -13,7 +13,7 @@ const ProfilePanel = lazy(() => import('./ProfilePanel'));
 const StoragePanel = lazy(() => import('./StoragePanel'));
 const CalendarPanel = lazy(() => import('./CalendarPanel'));
 const ReportsPanel = lazy(() => import('./ReportsPanel'));
-const AdminPanel = lazy(() => import('./AdminPanel'));
+const AdminArea = lazy(() => import('./AdminArea'));
 const CoursesPanel = lazy(() => import('../courses/CoursesPanel'));
 import { enrichMembers } from '../utils/scoring';
 import { gradeSubmission, writingFromReport } from '../utils/behaviorGrade';
@@ -840,7 +840,7 @@ const PeerlyticsDashboard = () => {
         </header>
         <div style={{ padding: '30px', maxWidth: 1100, margin: '0 auto' }}>
           <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: darkMode ? '#9a9a9a' : '#666' }}>Loading admin…</div>}>
-            <AdminPanel darkMode={darkMode} />
+            <AdminArea darkMode={darkMode} />
           </Suspense>
         </div>
       </div>

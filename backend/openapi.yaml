@@ -1587,6 +1587,99 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /admin/colleges:
+    get:
+      tags: [Auth]
+      operationId: listColleges
+      summary: Every college with its current licence (superAdmin)
+      description: Needs the `licensing_enabled` flag. The current licence is the one with the latest start date.
+      x-roles: [superAdmin]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [colleges]
+                properties:
+                  colleges:
+                    type: array
+                    items: { $ref: '#/components/schemas/AdminCollege' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+    post:
+      tags: [Auth]
+      operationId: createCollege
+      summary: Add a college (superAdmin)
+      description: Needs the `licensing_enabled` flag. Writes `college.created` to `audit_log`.
+      x-roles: [superAdmin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, slug]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 200 }
+                slug: { type: string, pattern: '^[a-z0-9-]{2,40}$' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminCollege' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+        '409':
+          description: '`SLUG_TAKEN`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /admin/colleges/{collegeId}/licences:
+    post:
+      tags: [Auth]
+      operationId: addLicence
+      summary: Add a licence to a college (superAdmin)
+      description: >-
+        Needs the `licensing_enabled` flag. Adds a row and keeps the older ones, and writes
+        `licence.created` to `audit_log`. A licence is a record: it does not limit seats or AI
+        spending yet, and there are no payments.
+      x-roles: [superAdmin]
+      parameters:
+        - name: collegeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [plan, seats, monthlyAiBudgetUsd, startsOn]
+              properties:
+                plan: { type: string, enum: [trial, standard] }
+                seats: { type: integer, minimum: 1 }
+                monthlyAiBudgetUsd: { type: number, minimum: 0 }
+                startsOn: { type: string, format: date }
+                endsOn: { type: [string, 'null'], format: date }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminLicence' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
   /admin/users/{uid}/data:
     parameters:
       - $ref: '#/components/parameters/Uid'
@@ -1889,6 +1982,29 @@ components:
           example: { error: Too many requests. Please wait a moment and try again., code: RATE_LIMITED }
 
   schemas:
+    AdminLicence:
+      type: object
+      required: [id, plan, seats, monthlyAiBudgetUsd, startsOn, endsOn, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        plan: { type: string, enum: [trial, standard] }
+        seats: { type: integer }
+        monthlyAiBudgetUsd: { type: number }
+        startsOn: { type: string, format: date }
+        endsOn: { type: [string, 'null'], format: date }
+        createdAt: { type: string, format: date-time }
+    AdminCollege:
+      type: object
+      required: [id, name, slug, createdAt, licence]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        createdAt: { type: string, format: date-time }
+        licence:
+          oneOf:
+            - $ref: '#/components/schemas/AdminLicence'
+            - type: 'null'
     # ── Shared ──
     Error:
       type: object
@@ -1939,6 +2055,8 @@ components:
         - ALREADY_SUBMITTED
         - NOT_SUBMITTED
         - FEATURE_DISABLED
+        - DATABASE_UNAVAILABLE
+        - SLUG_TAKEN
         - RATE_LIMITED
     Health:
       type: object

@@ -7,6 +7,7 @@ import checkRouter from './routes/check.js';
 import analyzeRouter from './routes/analyze.js';
 import { createHealthRouter } from './routes/health.js';
 import { analyzeBody, checkBody, validateBody } from './routes/schemas.js';
+import { createAdminRouter } from './src/admin/routes.js';
 import { sendError } from './src/auth/errors.js';
 import { getAdmin } from './src/auth/firebaseAdmin.js';
 import { createRequireAuth, requireRole } from './src/auth/middleware.js';
@@ -66,6 +67,7 @@ export function createApp({ config, db, metrics = createMetrics(), getClients = 
   app.use('/api/analyze', analyzeRouter);
   app.use('/api', createAuthRouter({ getClients }));
   app.use('/api', createExtensionRouter({ getClients }));
+  app.use('/api', createAdminRouter({ db, getClients }));
 
   app.use((err, _req, res, _next) => {
     // Malformed JSON from express.json() is a bad body, not a server error.

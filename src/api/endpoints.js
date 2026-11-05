@@ -44,6 +44,16 @@ export function createApi(client, { warn = () => {} } = {}) {
     grantExtension: (groupId, { deadline, reason }) =>
       client.request(`/api/groups/${encodeURIComponent(groupId)}/extension`, { method: 'POST', body: { deadline, reason } }),
 
+    /** superAdmin: set someone else's role. They are signed out and must sign in again. */
+    setUserRole: (uid, role) =>
+      client.request(`/api/admin/users/${encodeURIComponent(uid)}/role`, { method: 'POST', body: { role } }),
+
+    /** superAdmin, behind licensing_enabled: { colleges } with each one's current licence. */
+    listColleges: () => client.request('/api/admin/colleges'),
+    createCollege: ({ name, slug }) => client.request('/api/admin/colleges', { method: 'POST', body: { name, slug } }),
+    addLicence: (collegeId, licence) =>
+      client.request(`/api/admin/colleges/${encodeURIComponent(collegeId)}/licences`, { method: 'POST', body: licence }),
+
     async submitForCheck(payload) {
       try {
         return await client.request('/api/check', { method: 'POST', body: payload });
