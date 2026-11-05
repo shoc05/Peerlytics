@@ -1,0 +1,7 @@
+# Gitleaks settings for .github/workflows/security.yml.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Reviewed: the apiKey of an old Firebase web config. Web API keys ship in every page."
+commits = ["fcb9b77b0824f809c0cfb5ef4f2867c2a494b13c"]

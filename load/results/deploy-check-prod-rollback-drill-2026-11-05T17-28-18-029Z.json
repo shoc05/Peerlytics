@@ -1,0 +1,47 @@
+{
+  "label": "prod-rollback-drill",
+  "base_url": "http://prod.localhost",
+  "started_at": "2026-11-05T17:28:18.029Z",
+  "finished_at": "2026-11-05T17:28:18.029Z",
+  "duration": "2m",
+  "rate_per_route": 5,
+  "signed_in": false,
+  "total": {
+    "requests": 1202,
+    "failed": 0,
+    "failed_percent": 0,
+    "p95_ms": 7.7,
+    "median_ms": 4.2,
+    "max_ms": 291.8
+  },
+  "routes": {
+    "health": {
+      "requests": 601,
+      "failed": 0,
+      "failed_percent": 0,
+      "p95_ms": 8.5,
+      "median_ms": 5,
+      "max_ms": 291.8
+    },
+    "auth_me": {
+      "requests": 601,
+      "failed": 0,
+      "failed_percent": 0,
+      "p95_ms": 5.5,
+      "median_ms": 3.2,
+      "max_ms": 287.6
+    }
+  },
+  "first_failure_at": null,
+  "last_failure_at": null,
+  "thresholds_ok": {
+    "http_reqs{route:auth_me}: count>0": true,
+    "http_req_duration{route:auth_me}: p(95)<1000": true,
+    "http_req_duration: p(95)<1000": true,
+    "http_req_failed{route:auth_me}: rate<0.01": true,
+    "http_reqs{route:health}: count>0": true,
+    "http_req_duration{route:health}: p(95)<1000": true,
+    "http_req_failed{route:health}: rate<0.01": true,
+    "http_req_failed: rate<0.01": true
+  }
+}

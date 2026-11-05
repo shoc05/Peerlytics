@@ -22,27 +22,27 @@ Measured on 5 November 2026 from this repository, `gh`, test runs and the live s
 | 3.2 CI | Pass rate | 70.7% of finished runs (70 of 99); 67.3% of all 104 | Same | Cancelled runs left out of the first figure |
 | 3.2 CI | Average and median duration | 1.23 and 1.23 minutes (99 finished runs) | Same | `updatedAt - startedAt` |
 | 3.2 CI | Red runs later fixed on the same branch | 13 of 29 | Same | A later green run on that branch. The other 16 had no later green run there, including Snyk and superseded branches |
-| 3.5 Delivery | k6 virtual users | not measured | `load/results/` is empty | Follow `docs/cd-evidence.md` |
-| 3.5 Delivery | Failed requests, one-at-a-time update | not measured | Same | `docs/cd-evidence.md` section 1 |
-| 3.5 Delivery | Failed requests, blue/green switch | not measured | Same | Needs a second release; `docs/cd-evidence.md` section 2 |
-| 3.5 Delivery | p95 response time | not measured | Same | In the k6 output |
+| 3.5 Delivery | k6 load | 10 requests a second (constant arrival rate, 5 on each of 2 routes), with at least 10 virtual users allocated | `load/deploy-check.js` | k6 settings |
+| 3.5 Delivery | Failed requests, one-at-a-time update | not measured | `load/results/` has no staging run | `docs/cd-evidence.md` section 1 |
+| 3.5 Delivery | Failed requests, blue/green switch | 0 of 3,601 | `load/results/deploy-check-prod-bluegreen-v1.1.0-*.json`; [run 42068945037](https://github.com/shoc05/Peerlytics/actions/runs/42068945037) | k6 ran from the start of the deploy job, on the server PC |
+| 3.5 Delivery | p95 response time | 6.4 ms during the switch, 7.7 ms during the rollback drill | Same files | k6, from the server PC itself, so it leaves out any network delay. Say this if you quote it |
 | 3.5 Delivery | Seconds until the alert fired | not measured | Rules exist (`infra/k8s/monitoring/alert-rules.yaml`), but no firing was recorded | Stop a service with monitoring running and time the alert |
 | 3.5 Delivery | Restore-drill duration | not measured: `restore-drill.yml` does not exist | Repository; `docs/release-check.md` check 17 | Build the drill first |
-| 3.6 CD | Staging deploys | 2 succeeded ([41819199852](https://github.com/shoc05/Peerlytics/actions/runs/41819199852), [41861413147](https://github.com/shoc05/Peerlytics/actions/runs/41861413147)), plus 1 skipped run | `gh api` workflow runs, deploy job | GitHub lists 3 CD staging runs. In the first, the deploy passed but the E2E job failed |
-| 3.6 CD | Production deploys | 1 succeeded ([v1.0.0](https://github.com/shoc05/Peerlytics/actions/runs/41898272280), on its second attempt); `v1.0.1` never deployed | `gh run list --workflow cd-production.yml` | Attempt 1 of `v1.0.0` deployed the backend but failed at Firebase Hosting (missing permission) |
+| 3.6 CD | Staging deploys | 4 succeeded of 5 attempted (41819199852, 41861413147, 42071511100, 42082654479; 42002124343 failed) | `gh api` deploy jobs | Only 41861413147 was green overall. In the others a later E2E job failed; see 3.10 |
+| 3.6 CD | Production deploys | 2 succeeded: [v1.0.0](https://github.com/shoc05/Peerlytics/actions/runs/41898272280) (second attempt) and [v1.1.0](https://github.com/shoc05/Peerlytics/actions/runs/42068945037). `v1.0.1` never deployed | `gh run list --workflow cd-production.yml` | |
 | 3.6 CD | Average minutes from CI end to deploy success | 2.99 minutes (n = 2, staging: 3 min 41 s and 2 min 18 s) | CI end time and deploy job `completed_at` | From merge: 4 min 50 s and 3 min 31 s. Small sample |
-| 3.6 CD | Automatic rollbacks | 0 | Deploy logs of all 3 deploys: `result=ok` | Searched for the result lines |
+| 3.6 CD | Automatic rollbacks | 0. One manual rollback drill: 63 s back, 16 s forward | Deploy logs (`result=ok`); drill output | Timed around `rollback.sh prod` |
 | 3.6 CD | First production release | `v1.0.0`, 4 November 2026 (20:06 UTC; 5 November, 02:06 in Bhutan) | [Release page](https://github.com/shoc05/Peerlytics/releases/tag/v1.0.0) | `gh release list` |
 | 3.6 CD | Image sizes | Backend 574 MB, collab 361 MB | `docker images` on the server | Docker Desktop's reported size. The images also use `postgres:16-alpine` (420 MB) and `caddy:2.11.7-alpine` (93.1 MB) |
-| 3.7 Security | Gitleaks findings | 1 (old Firebase web `apiKey`, `src/firebase/firebase.js`, commit `fcb9b77`) | Gitleaks 8.28.0 on a mirror clone of all branches | Run by hand. No CI job exists |
+| 3.7 Security | Gitleaks findings | 1 (old Firebase web `apiKey`, `src/firebase/firebase.js`, commit `fcb9b77`), reviewed and listed in `.gitleaks.toml`. 0 new | Gitleaks 8.28.0, now in `.github/workflows/security.yml` | Local run on a mirror of the repository |
 | 3.7 Security | Snyk issues found and fixed | 3 Snyk pull requests merged (#23, #32, #33). Exact issue count: not measured | `gh pr list`. `security.yml` does not exist, so there are no artifacts | #32's title says 2 vulnerabilities. The Snyk dashboard has the rest |
-| 3.7 Security | Open dependency issues | Website 5 high, 31 moderate. Backend 8 high, 8 moderate. Collab 6 moderate | `npm audit --omit=dev` | Run locally |
+| 3.7 Security | Open dependency issues | Website 4 high, 31 moderate. Backend 4 high, 7 moderate. Collab 6 moderate. Was 13 high in all | `npm audit --omit=dev`, after `npm audit fix` | The 8 high issues come through `firebase` |
 | 3.7 Security | ZAP warnings | High 0, medium 0, low 1, informational 1 | `zap-baseline-staging` artifact, run 41861413147 | Low: `X-Powered-By`. Informational: "Storable and Cacheable Content". Passive scan of `/api/health` only |
-| 3.7 Security | What was fixed | Not yet: these checks were new, and every FAIL is still open | `docs/release-check.md` | |
-| 3.9 Acceptance | Release check counts | 12 PASS, 8 FAIL, 6 NEEDS SANGAY (26 checks) | `docs/release-check.md` | Counted |
+| 3.7 Security | What was fixed | Sign-in on the analysis routes and API security headers (live). Secret scanning in CI and 5 high dependency issues (in the pull request). Website headers (not yet live) | `docs/release-check.md` | |
+| 3.9 Acceptance | Release check counts | 17 PASS, 5 FAIL, 4 NEEDS SANGAY (26 checks) | `docs/release-check.md` | Counted |
 | 3.9 Acceptance | Acceptance test results | not measured: `docs/acceptance-test.md` does not exist | Repository | |
 | Abstract, conclusion | Production release | `v1.0.0`, 4 November 2026 | As above | |
-| Abstract, conclusion | Checks passed out of total | 12 of 26 | `docs/release-check.md` | 6 are not yet decided |
+| Abstract, conclusion | Checks passed out of total | 17 of 26 | `docs/release-check.md` | 4 are not yet decided |
 | Abstract, conclusion | Features cut | 4 of 7 advanced features have a flag that no code reads: push, CSV invite, .docx, licensing | `git grep` for each flag name in `src`, `backend`, `collab` | Yjs, offline and document tabs do read their flags. Searched in code only, not run with the flags on. Peer evaluation, course dashboard, Dzongkha and `ai_provider` also have unread flags |
 | Leave for Sangay | Jira items completed out of 66, and carried over | NEEDS SANGAY | Jira | |
 | Leave for Sangay | Burndown charts | NEEDS SANGAY | Jira | |
@@ -52,7 +52,7 @@ Measured on 5 November 2026 from this repository, `gh`, test runs and the live s
 
 ### 2.4 and 3.6 Hosting
 
-The original plan was to host the system on an Oracle Cloud ARM virtual machine, and the deployment files were later prepared for a Microsoft Azure Ubuntu x64 virtual machine. Neither was used: the team had no Oracle virtual machine and no access to an Azure for Students subscription. The system therefore runs on a Windows 11 personal computer, using Ubuntu on the Windows Subsystem for Linux (WSL2), Docker Desktop and a GitHub Actions self-hosted runner, selected by the setting `DEPLOY_MODE=local`. Images are built for `linux/amd64` through the `IMAGE_PLATFORM` setting, and the same Compose and Caddy files are used. The Ansible files for a cloud server remain in the repository but were not used for this deployment.
+The original plan was to host the system on an Oracle Cloud ARM virtual machine, and the deployment files were later prepared for a Microsoft Azure Ubuntu x64 virtual machine. Neither was used: the team had no Oracle virtual machine and no access to an Azure for Students subscription. The system therefore runs on a Windows 11 personal computer, using Ubuntu on the Windows Subsystem for Linux (WSL2), Docker Desktop and a GitHub Actions self-hosted runner, selected by the setting `DEPLOY_MODE=local`. Images are built for `linux/amd64` through the `IMAGE_PLATFORM` setting, and the same Compose and Caddy files are used. The Ansible files for a cloud server remain in the repository but were not used for this deployment. A Tailscale Funnel tunnel was then prepared to give the production API a public HTTPS address without opening router ports.
 
 ### 3.6 CD pipeline
 
@@ -82,15 +82,15 @@ The first attempt failed at step 5 because the deploy account lacked the `servic
 
 ### 3.5 and 3.6 Rollback evidence
 
-No rollback has happened in a real run. All three deploys recorded `result=ok`. The automatic rollback in `deploy.sh` and the one-command `rollback.sh` are covered by the deploy script tests in the "CD checks" workflow, but they have not been exercised on the live server. A rollback drill needs a second production release. NEEDS SANGAY: add the run link here once the drill is done.
+Production was rolled back and forward in a drill on 5 November 2026. With `v1.1.0` live on the green colour, `rollback.sh prod` returned traffic to `v1.0.0` on blue in 63 seconds, and running it again returned to `v1.1.0` in 16 seconds. A k6 load test ran across both switches and recorded 1,202 requests, none of which failed, with a p95 response time of 7.7 ms. The measurements were taken on the server itself. No automatic rollback has happened in a real deploy. All deploys that reached the end recorded `result=ok`. The automatic rollback in `deploy.sh` is covered by the deploy script tests in the "CD checks" workflow, using a fake Docker.
 
 ### 3.7 Security
 
-A release check was carried out against the staging and production services. Requests without a valid token to protected account routes were refused with status 401, and automated tests confirm status 403 for a user with the wrong role. The rate limit on the analysis route returned status 429 after 20 requests in a minute. A Gitleaks scan of the full history found one item, the API key of an earlier Firebase web configuration. No private keys or environment files are tracked. The check also found weaknesses that remain open. The running backend loads a version of the application without the `helmet` security headers and without an authentication check on the two analysis routes, although a protected version exists in the code. The production website sends few security headers, and `npm audit` reports 13 high-severity issues in production dependencies. These findings were not fixed at the time of writing.
+A release check was carried out against the staging and production services. It found that the running backend had no sign-in check on the two analysis routes and no `helmet` security headers, although a protected version existed elsewhere in the code. Both were fixed and released in `v1.1.0`, and production now answers 401 to requests with no token. The rate limit on the analysis route returned status 429 after 20 requests in a minute. Automated tests confirm status 403 for a user with the wrong role. A Gitleaks scan of the full history found one item, the API key of an earlier Firebase web configuration, and a scan now runs in CI on every pull request. No private keys or environment files are tracked. High-severity issues in production dependencies fell from 13 to 8; the remainder come through the Firebase SDK and need a major version update. Website security headers have been written but not yet verified live.
 
 ### 3.9 Release check
 
-`docs/release-check.md` lists 26 checks covering authentication, authorisation, rate limiting, cross-origin rules, security headers, secrets, dependency issues, the delivery pipeline and recovery. Of these, 12 passed, 8 failed and 6 need a further manual step. Each failure has a suggested fix in that document. `docs/acceptance-test.md` was not produced.
+`docs/release-check.md` lists 26 checks covering authentication, authorisation, rate limiting, cross-origin rules, security headers, secrets, dependency issues, the delivery pipeline and recovery. Of these, 17 passed, 5 failed and 4 need a further manual step. Each failure has a suggested fix in that document. `docs/acceptance-test.md` was not produced.
 
 ### 3.10 Limitations (new points)
 
@@ -150,7 +150,7 @@ Azure is left out because it was not used. WSL, self-hosted runners, Firebase Ho
 | 2.3 | NEEDS SANGAY: caption not in repo | | No |
 | 2.4 | Hosting diagram or Docker Desktop with the containers running | Docker Desktop | No |
 | 3.4 to 3.9 | NEEDS SANGAY: captions not in repo. Likely the app's course, workspace and analytics screens | `https://peerlytics-4367c.web.app` | No |
-| 3.10 | Blue/green: the Summary with the live colour, and the log lines where the new colour becomes healthy and Caddy reloads | CD production run, second release | No, needs the second release |
+| 3.10 | Blue/green: the Summary with the live colour, and the log lines where the new colour becomes healthy and Caddy reloads | [Run 42068945037](https://github.com/shoc05/Peerlytics/actions/runs/42068945037) | No, ready to capture |
 | 3.11, 3.12 | NEEDS SANGAY: captions not in repo | | No |
 | 3.13 | CD pipeline figure | `docs/diagrams/cd-pipeline.md` rendered on GitHub | Diagram exists; no image |
 | 3.14 to 3.20 | NEEDS SANGAY: captions not in repo | | No |
@@ -159,7 +159,7 @@ Azure is left out because it was not used. WSL, self-hosted runners, Firebase Ho
 | 3.23 | Automatic rollback | Needs the bad-tag test in `docs/cd-evidence.md` section 3 | No, has not happened |
 | Optional | README rendered on GitHub | `https://github.com/shoc05/Peerlytics` | No |
 | Optional | Release-check table | `docs/release-check.md` on GitHub | No |
-| Optional | k6 summary | Terminal, or `load/results/` | No, not run |
+| Optional | k6 summary | The two files in `load/results/` | No, data ready |
 | Not applicable | Azure VM overview and cost analysis | No Azure VM was used | |
 
 ## D. LO coverage check
@@ -172,8 +172,8 @@ The wording of LO1 to LO8 is not in the repository, so the LO column is NEEDS SA
 | NEEDS SANGAY | Continuous delivery and deployment | `cd-staging.yml`, `cd-production.yml`, `docs/deploy.md`, runs 41861413147 and 41898272280 | 3.6 | Strong |
 | NEEDS SANGAY | Containers and infrastructure | `backend/Dockerfile`, `collab/Dockerfile`, `infra/`, `infra/ansible/` (written, not run in this deployment) | 2.4, 3.6 | Medium |
 | NEEDS SANGAY | Automated testing | 117, 121 and 19 unit tests, 30 PostgreSQL tests, 31 rules tests, `e2e/staging/smoke.spec.js` | 3.2 | Strong |
-| NEEDS SANGAY | Security | `firestore.rules`, `docs/release-check.md`, ZAP artifact | 3.7 | **Weak:** 5 security FAILs are open (checks 12 to 15 and 18) |
-| NEEDS SANGAY | Monitoring and reliability | `infra/k8s/monitoring/`, `load/deploy-check.js` | 3.5 | **Weak:** no k6 results, no alert timing, no restore drill or rollback drill |
+| NEEDS SANGAY | Security | `firestore.rules`, `docs/release-check.md`, ZAP artifact | 3.7 | Medium: checks 14 and 15 are still open |
+| NEEDS SANGAY | Monitoring and reliability | `infra/k8s/monitoring/`, `load/deploy-check.js` | 3.5 | **Weak:** k6 and the rollback drill are done, but there is no alert timing and no restore drill |
 | NEEDS SANGAY | Configuration and dependency management | `.env.example`, `docs/feature-flags.md`, the cleanup in 3.6 | 3.6 | Medium |
 | NEEDS SANGAY | Team process | `jira-import.csv`, `.github/workflows/jira-check.yml`, pull request history | Jira charts | Medium: charts are NEEDS SANGAY |
 
@@ -185,5 +185,4 @@ The wording of LO1 to LO8 is not in the repository, so the LO column is NEEDS SA
 - LO1 to LO8 wording and mapping
 - Screenshot captions for 2.3, 3.4 to 3.9, 3.11, 3.12 and 3.14 to 3.20
 - All screenshots
-- Rollback run link (needs the second release)
-- Release checks 20 to 24 and 26 in `docs/release-check.md`
+- Release checks 20, 21, 24 and 26 in `docs/release-check.md`
