@@ -48,7 +48,7 @@ NEEDS SANGAY means it can't be measured from the repository alone, or depends on
 
 | # | Fix |
 |---|---|
-| 12, 13 | Decide which of the two apps is the real one. `backend/src/app.js` already has `helmet`, `requireAuth` and role checks, so the likely fix is to make `server.js` use it, then run the backend tests and redeploy. Check first that it keeps what `backend/app.js` adds (metrics, the health router with the database check). This is the most urgent fix: it stops anyone calling the paid analysis routes without signing in |
+| 12, 13 | Add `helmet`, `requireAuth` and a role check to `backend/app.js`, the app `server.js` loads. Do not switch to `backend/src/app.js`: it has no database health check or body validation. PR #73 has this fix; these stay FAIL until it is deployed and re-checked |
 | 14 | Add a `headers` block to `firebase.json` with `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy` and a CSP that allows Firebase and the API |
 | 15 | Run `npm audit` in each package. Update what has a safe fix, and record why the rest stay |
 | 16 | `scripts/setup-github.sh` sets up the required checks. Run it, or set the rules by hand, on `main` and `develop`. The repository must stay public on a free plan |
