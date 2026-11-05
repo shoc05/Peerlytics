@@ -8,7 +8,7 @@ Every advanced feature sits behind a flag in **Firebase Remote Config**. If a fl
 
 | Flag | Type | Default | Owner (step) | Off means |
 |---|---|---|---|---|
-| `ai_provider` | `openai` \| `legacy` | `legacy` | Sonam (2.4) | Hugging Face + Virtual Writing Tutor analyse submissions |
+| `ai_provider` | `openai` \| `legacy` | `legacy` | Sonam (2.4) | Hugging Face + Virtual Writing Tutor analyse submissions. `openai` also needs `OPENAI_API_KEY` and `OPENAI_MODEL`. Applies to `/api/workspaces/{id}/submission`; `/api/check` always uses the legacy providers |
 | `ai_detection_enabled` | boolean | `true` | Sonam (2.4) | AI-likelihood detection is skipped; the report says it is unavailable |
 | `yjs_enabled` | boolean | `false` | Kezang (2.2) | The old Firestore document sync; no collab server connection |
 | `doc_tabs_enabled` | boolean | `false` | Kezang (2.3), Ngawang (3.9) | One document body, no tabs panel. Also off when `yjs_enabled` is off |
