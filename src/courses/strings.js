@@ -89,6 +89,7 @@ export const COURSE_STRINGS = Object.freeze({
     errorUnavailable: 'Courses are not available yet.',
     errorRateLimited: 'Too many requests. Wait a moment and try again.',
     errorInvalid: 'Some of the details are not valid. Check them and try again.',
+    errorAlreadyEnrolled: 'You are already enrolled in this course.',
     errorGeneric: 'Something went wrong. Please try again.',
   },
   dz: {
@@ -179,6 +180,7 @@ export const COURSE_STRINGS = Object.freeze({
     errorUnavailable: 'སློབ་ཚན་ཚུ་ ད་ལྟོ་ཚུན་ མིན་འདུག',
     errorRateLimited: 'ཞུ་བ་ མང་དྲགས་པས། ཅུང་ཀུ་ སྒུག་སྟེ་ ལོག་འབད།',
     errorInvalid: 'བརྡ་དོན་ལ་ལུ་ ངོ་མ་མེན། བལྟ་སྟེ་ ལོག་འབད།',
+    errorAlreadyEnrolled: 'You are already enrolled in this course.',
     errorGeneric: 'འཛོལ་བ་ཅིག་ བྱུང་ཡི། ལོག་སྟེ་ འབད།',
   },
 });

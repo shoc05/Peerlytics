@@ -5,6 +5,9 @@ import cors from 'cors';
 import helmet from 'helmet';
 import checkRouter from './routes/check.js';
 import analyzeRouter from './routes/analyze.js';
+import { createAssignmentRouter } from './routes/assignments.js';
+import { createCourseContext } from './routes/courseContext.js';
+import { createCourseRouter } from './routes/courses.js';
 import { createHealthRouter } from './routes/health.js';
 import { analyzeBody, checkBody, validateBody } from './routes/schemas.js';
 import { createAdminRouter } from './src/admin/routes.js';
@@ -37,9 +40,11 @@ function rateLimit({ windowMs = 60_000, max = 20 } = {}) {
  * @param {{ config: ReturnType<import('./config/index.js').loadConfig>,
  *           db: ReturnType<import('./db/pool.js').createDb>,
  *           metrics?: ReturnType<typeof createMetrics>,
- *           getClients?: typeof getAdmin }} deps
+ *           getClients?: typeof getAdmin,
+ *           courseDeps?: object }} deps
+ *   courseDeps: overrides for createCourseContext. Tests pass fakes for Firebase and Firestore.
  */
-export function createApp({ config, db, metrics = createMetrics(), getClients = getAdmin }) {
+export function createApp({ config, db, metrics = createMetrics(), getClients = getAdmin, courseDeps = {} }) {
   const app = express();
 
   app.set('trust proxy', 1); // correct req.ip behind Render/hosting proxies (for rate limiting)
@@ -68,6 +73,9 @@ export function createApp({ config, db, metrics = createMetrics(), getClients = 
   app.use('/api', createAuthRouter({ getClients }));
   app.use('/api', createExtensionRouter({ getClients }));
   app.use('/api', createAdminRouter({ db, getClients }));
+  const courses = createCourseContext({ db, getClients, ...courseDeps });
+  app.use('/api', createCourseRouter(courses));
+  app.use('/api', createAssignmentRouter(courses));
 
   app.use((err, _req, res, _next) => {
     // Malformed JSON from express.json() is a bad body, not a server error.

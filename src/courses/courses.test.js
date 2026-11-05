@@ -111,6 +111,7 @@ test('a deadline needs a valid time and must be in the future', () => {
 // ── viewState ──
 test('API errors map to the contract codes', () => {
   assert.equal(errorKey(null), null);
+  assert.equal(errorKey({ status: 409, code: 'ALREADY_ENROLLED' }), 'errorAlreadyEnrolled');
   assert.equal(errorKey({ status: 0, code: 'NETWORK_ERROR' }), 'errorOffline');
   assert.equal(errorKey({ status: 401, code: 'TOKEN_EXPIRED' }), 'errorSignedOut');
   assert.equal(errorKey({ status: 403, code: 'NO_ROLE' }), 'errorNoRole');
