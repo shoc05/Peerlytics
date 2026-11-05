@@ -39,7 +39,7 @@ Config: a single `.env` at the repo root serves both packages. Vite reads `VITE_
 
 **API client.** Backend calls go through `src/api/` (`index.js` wires `client.js` to Firebase Auth), which sends `Authorization: Bearer <ID token>` on everything except `/api/health` and throws `ApiError { status, code, retryAfter }`. `src/services/api.js` only re-exports it. Student HTML is rendered only through `utils/sanitizeHtml.js` (DOMPurify).
 
-**Not part of the app.** `archive/` holds the old standalone prototype (`peerlytics-app.jsx`, `peerlytics-demo.html`, its `SETUP-prototype.md`) and the unused Firebase console snippet; nothing imports them. `scripts/*.cjs|js` are one-off codemods that rewrote `peerlytics-app.jsx`/`WorkspacePanel.jsx` during earlier refactors; don't run them.
+**Not part of the app.** `scripts/` holds only `setup-github.sh` and `github-setup.md`. The old prototype in `archive/` and the one-off codemods in `scripts/` were deleted; git history has them.
 
 See `docs/audit.md` for what is done, partly done and missing against the rules below.
 

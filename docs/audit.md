@@ -150,7 +150,7 @@ These are safe to ship off, provided the flag system exists first:
 
 ### 3.4 Duplicate or obsolete files to archive later
 
-**Step 1.3:** the root `peerlytics-app.jsx`, `peerlytics-demo.html` and the `SETUP.md` that described them, `src/firebase/firebase.js` and `src/hooks/useTheme.js` were moved to `archive/` (see `archive/README.md`). The rest of the table is still to do.
+**Step 1.3:** the root `peerlytics-app.jsx`, `peerlytics-demo.html` and the `SETUP.md` that described them, `src/firebase/firebase.js` and `src/hooks/useTheme.js` were moved to `archive/`. `archive/` and the `scripts/` codemods below were later deleted (see `docs/report-evidence.md`); git history has them. The rest of the table is still to do.
 
 | File | Evidence it is unused |
 |---|---|
@@ -158,7 +158,7 @@ These are safe to ship off, provided the flag system exists first:
 | ~~`peerlytics-demo.html`~~ | Archived in 1.3. A 2.5 KB fragment of the same prototype; not referenced by `index.html` or Vite |
 | ~~`src/firebase/firebase.js`~~ | Archived in 1.3. Never imported. `config.js` is the real initialiser. It is the Firebase console snippet with the web config inline, and it pulls in Analytics. |
 | ~~`src/hooks/useTheme.js`~~ | Archived in 1.3. Never imported. `useThemePreference.js` is used by Login, Signup, GuestRoute and ProtectedRoute. |
-| `scripts/fix-peerlytics.cjs`, `migrate-dashboard-auth.cjs`, `migrate-workspace-firebase.cjs`, `patch-analytics.js`, `patch-analytics2.cjs`, `patch-workspace.js` | One-off codemods that rewrite `peerlytics-app.jsx` and `WorkspacePanel.jsx` with string replacement. They are not in any npm script or workflow, and running them now would corrupt the current files. |
+| ~~`scripts/fix-peerlytics.cjs`, `migrate-dashboard-auth.cjs`, `migrate-workspace-firebase.cjs`, `patch-analytics.js`, `patch-analytics2.cjs`, `patch-workspace.js`~~ | Deleted. One-off codemods that rewrite `peerlytics-app.jsx` and `WorkspacePanel.jsx` with string replacement. They are not in any npm script or workflow, and running them now would corrupt the current files. |
 | `.github/workflows/github-actions-demo.yml` | GitHub's quickstart demo. It runs on every push and checks nothing. Remove it once `ci.yml` is merged. |
 | `deleteUserProfile` in `src/firebase/firestoreService.js:77` | Exported, never called, and blocked by the rules (`allow delete: if false`). Replace it with a backend deletion endpoint. |
 
