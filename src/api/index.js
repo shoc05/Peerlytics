@@ -3,6 +3,7 @@ import { signOut } from 'firebase/auth';
 import { logger } from '../utils/logger';
 import { getFirebaseAuth } from '../firebase/config';
 import { createApiClient } from './client';
+import { createCourseApi } from './courseEndpoints';
 import { createApi } from './endpoints';
 
 export { ApiError } from './client';
@@ -21,8 +22,5 @@ const client = createApiClient({
 export const { authHeaders, request } = client;
 export const { addLicence, chooseRole, createCollege, getMe, grantExtension, listColleges, setUserRole, submitForCheck, healthCheck } = createApi(client, { warn: logger.warn });
 
-// Course site (step 1.7). The backend has no course routes yet (step 2.1 adds them with
-// backend/openapi.yaml), so this stays null and the Courses tab says "Not available yet".
-// Step 2.6 replaces it with wrappers over the real routes that provide the methods in
-// COURSE_API_METHODS (src/courses/courseApi.js); that switches the course site on.
-export const courseApi = null;
+// Course site: the methods in COURSE_API_METHODS (src/courses/courseApi.js) over the real routes.
+export const courseApi = createCourseApi(client);

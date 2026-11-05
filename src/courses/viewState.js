@@ -7,6 +7,7 @@ export function errorKey(err) {
   if (status === 0) return 'errorOffline';
   if (status === 401) return 'errorSignedOut';
   if (code === 'NO_ROLE') return 'errorNoRole';
+  if (code === 'ALREADY_ENROLLED') return 'errorAlreadyEnrolled';
   if (status === 403) return 'errorForbidden';
   if (status === 404) return 'errorNotFound';
   if (status === 501) return 'errorUnavailable';

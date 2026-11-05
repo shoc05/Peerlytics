@@ -214,6 +214,11 @@ export default function CoursePage({ api, courseId, t, ui, isLecturer, onBack, p
         <p className={`m-0 mt-1 text-[13px] ${ui.sub}`}>
           {t('lecturer')}: {course.lecturerName || t('noLecturer')}
         </p>
+        {course.joinCode && (
+          <p className={`m-0 mt-1 text-[13px] ${ui.sub}`}>
+            {t('joinCodeLabel')}: <strong className="font-mono tracking-[0.1em]">{course.joinCode}</strong>
+          </p>
+        )}
       </header>
 
       <div

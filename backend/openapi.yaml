@@ -2144,6 +2144,7 @@ components:
           type: [string, 'null']
           enum: [lecturer, student, null]
           description: The caller's role in this course; null for admins who aren't enrolled
+        ownerName: { type: string, description: The lecturer who owns the course. Only in the course list. }
         archived: { type: boolean }
     Course:
       allOf:
