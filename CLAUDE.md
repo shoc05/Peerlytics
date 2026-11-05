@@ -35,7 +35,7 @@ Config: a single `.env` at the repo root serves both packages. Vite reads `VITE_
 
 **Grading.** `utils/behaviorGrade.js` is the single source of the grade (0-10 writing base minus time/edit/paste/AI penalties; AI is a weak signal, max -4). `utils/scoring.js` only keeps roster helpers (effort score, ranks, badges, free-rider detection) used by the dashboard and analytics; do not add a second grading path there.
 
-**Backend.** `backend/server.js` is a small Express app: `/api/health`, `/api/check`, `/api/analyze`, an in-memory per-IP rate limiter, and an optional node-cron deadline-reminder emailer (`services/reminderService.js`, Firebase Admin + SMTP) that stays dormant without credentials. Endpoints are currently unauthenticated.
+**Backend.** `backend/server.js` is a small Express app: `/api/health`, `/api/check`, `/api/analyze`, an in-memory per-IP rate limiter, and an optional node-cron deadline-reminder emailer (`services/reminderService.js`, Firebase Admin + SMTP) that stays dormant without credentials. Every `/api` route except `/api/health` needs a Firebase ID token, and the analysis routes also need a role. `server.js` loads `backend/app.js`; `backend/src/app.js` is not used by the running server.
 
 **API client.** Backend calls go through `src/api/` (`index.js` wires `client.js` to Firebase Auth), which sends `Authorization: Bearer <ID token>` on everything except `/api/health` and throws `ApiError { status, code, retryAfter }`. `src/services/api.js` only re-exports it. Student HTML is rendered only through `utils/sanitizeHtml.js` (DOMPurify).
 

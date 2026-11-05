@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { createApp } from './app.js';
 import { loadConfig } from './config/index.js';
+import { fakeAuth } from './src/auth/testFakes.js';
 import { createMetrics } from './src/metrics/index.js';
 import client from 'prom-client';
 
@@ -11,6 +12,15 @@ let server;
 let baseUrl;
 let dbUp = true;
 const fakeDb = { pool: {}, ping: async () => dbUp, close: async () => {} };
+const clients = {
+  auth: fakeAuth({
+    tokens: {
+      student: { uid: 'student-1', email: 'student@example.test', role: 'student' },
+      unassigned: { uid: 'new-user', email: 'new@example.test' },
+    },
+  }),
+};
+const getClients = () => clients;
 
 const savedKeys = { HF_API_KEY: process.env.HF_API_KEY, VWT_API_KEY: process.env.VWT_API_KEY };
 
@@ -21,6 +31,7 @@ before(async () => {
     config: loadConfig({}),
     db: fakeDb,
     metrics: createMetrics({ registry: new client.Registry() }),
+    getClients,
   });
   await new Promise((resolve) => {
     server = app.listen(0, resolve);
@@ -33,10 +44,10 @@ after(async () => {
   await new Promise((resolve) => server.close(resolve));
 });
 
-async function call(method, path, body, { raw } = {}) {
+async function call(method, path, body, { raw, token = 'student' } = {}) {
   const res = await fetch(`${baseUrl}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) },
     body: raw ?? (body === undefined ? undefined : JSON.stringify(body)),
   });
   const text = await res.text();
@@ -79,6 +90,82 @@ describe('GET /api/health', () => {
     assert.equal('db' in res, false);
     assert.equal(res.ok, true);
   });
+});
+
+describe('sign-in on the analysis routes', () => {
+  const text = 'Some writing that is long enough.';
+
+  for (const path of ['/api/check', '/api/analyze']) {
+    test(`${path} refuses a request with no token`, async () => {
+      const res = await call('POST', path, { text }, { token: null });
+      assert.equal(res.status, 401);
+      assert.equal(res.body.code, 'NO_TOKEN');
+    });
+
+    test(`${path} refuses an invalid token`, async () => {
+      const res = await call('POST', path, { text }, { token: 'not-a-token' });
+      assert.equal(res.status, 401);
+      assert.equal(res.body.code, 'TOKEN_INVALID');
+    });
+
+    test(`${path} refuses a user without a role`, async () => {
+      const res = await call('POST', path, { text }, { token: 'unassigned' });
+      assert.equal(res.status, 403);
+      assert.equal(res.body.code, 'NO_ROLE');
+    });
+
+    test(`${path} checks the token before reading the body`, async () => {
+      const res = await call('POST', path, undefined, { raw: '{"text": ', token: null });
+      assert.equal(res.status, 401);
+    });
+  }
+
+  test('answers 503 when the Admin SDK is not configured', async () => {
+    const app = createApp({
+      config: loadConfig({}),
+      db: fakeDb,
+      metrics: createMetrics({ registry: new client.Registry() }),
+      getClients: () => null,
+    });
+    const s = await new Promise((resolve) => {
+      const srv = app.listen(0, () => resolve(srv));
+    });
+    const res = await fetch(`http://127.0.0.1:${s.address().port}/api/check`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer student' },
+    });
+    await new Promise((resolve) => s.close(resolve));
+    assert.equal(res.status, 503);
+  });
+
+  test('requests with no token still count towards the rate limit', async () => {
+    const app = createApp({
+      config: loadConfig({}),
+      db: fakeDb,
+      metrics: createMetrics({ registry: new client.Registry() }),
+      getClients,
+    });
+    const s = await new Promise((resolve) => {
+      const srv = app.listen(0, () => resolve(srv));
+    });
+    const statuses = [];
+    for (let i = 0; i < 21; i += 1) {
+      const res = await fetch(`http://127.0.0.1:${s.address().port}/api/check`, { method: 'POST' });
+      statuses.push(res.status);
+    }
+    await new Promise((resolve) => s.close(resolve));
+    assert.equal(statuses[0], 401);
+    assert.equal(statuses[19], 401);
+    assert.equal(statuses[20], 429);
+  });
+});
+
+test('security headers are set and Express is not named', async () => {
+  const res = await fetch(`${baseUrl}/api/health`);
+  assert.ok(res.headers.get('content-security-policy'));
+  assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(res.headers.get('x-frame-options'), 'SAMEORIGIN');
+  assert.equal(res.headers.get('x-powered-by'), null);
 });
 
 describe('POST /api/check body validation', () => {
