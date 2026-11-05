@@ -8,6 +8,7 @@ const { createApp } = await import('./app.js');
 const { createDb } = await import('./db/pool.js');
 const { startDeadlineReminders } = await import('./services/reminderService.js');
 const { startServerDeadlines } = await import('./src/jobs/deadlines/index.js');
+const { startFlagMirror } = await import('./src/flags/firestoreMirror.js');
 
 const config = loadConfig();
 
@@ -43,6 +44,8 @@ const server = app.listen(PORT, () => {
   startDeadlineReminders();
   // Every minute: submit and lock workspaces past their deadline (dormant without the Admin SDK key).
   startServerDeadlines({ pool: db.pool });
+  // Copies courses_v2 to Firestore for the rules (dormant without the Admin SDK key).
+  startFlagMirror();
 });
 
 server.on('error', (err) => {

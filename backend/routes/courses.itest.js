@@ -46,6 +46,7 @@ function recordingMirror() {
 }
 
 let testDb;
+let coursesOn = true;
 let server;
 let baseUrl;
 const mirror = recordingMirror();
@@ -64,6 +65,7 @@ before(async () => {
       getClients: () => ({ auth }),
       mirror,
       joinLimit: createUserRateLimit({ max: 6, windowMs: 60_000 }),
+      isEnabled: async () => coursesOn,
     },
   });
   await new Promise((resolve) => {
@@ -429,4 +431,16 @@ describe('archived courses', () => {
     assert.equal((await call('stu1', 'GET', '/courses?includeArchived=true')).body.courses.length, 1);
     assert.equal((await call('lect', 'PATCH', `/courses/${state.course.id}`, { archived: false })).body.archived, false);
   });
+});
+
+test('with courses_v2 off the routes answer 404 FEATURE_DISABLED, after the sign-in check', async () => {
+  coursesOn = false;
+  try {
+    const off = await call('stu1', 'GET', '/courses');
+    assert.deepEqual([off.status, off.body.code], [404, 'FEATURE_DISABLED']);
+    assert.equal((await call('noRole', 'GET', '/courses')).status, 403);
+    assert.equal((await fetch(`${baseUrl}/api/courses`)).status, 401);
+  } finally {
+    coursesOn = true;
+  }
 });

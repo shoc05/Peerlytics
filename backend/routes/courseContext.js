@@ -3,6 +3,7 @@
 import { randomBytes } from 'node:crypto';
 import { createRequireAuth, requireRole } from '../src/auth/middleware.js';
 import { getAdmin } from '../src/auth/firebaseAdmin.js';
+import { getFlag } from '../src/flags/index.js';
 import { createUserRateLimit, requireDb } from './http.js';
 import { ensureUser } from '../services/courses/access.js';
 import { createGroupMirror } from '../services/courses/groupMirror.js';
@@ -10,7 +11,7 @@ import { createGroupMirror } from '../services/courses/groupMirror.js';
 export const ANY_ROLE = ['student', 'lecturer', 'collegeAdmin', 'superAdmin'];
 
 /**
- * @param {{ db, getClients?, mirror?, now?, random?, joinLimit? }} deps
+ * @param {{ db, getClients?, mirror?, now?, random?, joinLimit?, isEnabled? }} deps
  *   getClients returns { auth, db } (firebase-admin) or null; tests pass fakes.
  */
 export function createCourseContext({
@@ -20,6 +21,7 @@ export function createCourseContext({
   now = Date.now,
   random = randomBytes,
   joinLimit = createUserRateLimit({ max: 10, windowMs: 60_000 }),
+  isEnabled = getFlag,
 }) {
   const requireAuth = createRequireAuth(() => getClients()?.auth ?? null);
 
@@ -35,13 +37,20 @@ export function createCourseContext({
     ensureUser(db.pool, req.user, lookupName).then(() => next(), next);
   }
 
+  function requireCourses(_req, res, next) {
+    isEnabled('courses_v2').then((on) => {
+      if (on) return next();
+      return res.status(404).json({ error: 'This feature is not turned on.', code: 'FEATURE_DISABLED' });
+    }, next);
+  }
+
   return {
     db,
     mirror,
     now,
     random,
     joinLimit,
-    /** requireAuth, then the role check, then a database and the caller's users row. */
-    guard: (...roles) => [requireAuth, requireRole(...roles), requireDb(db), syncUser],
+    /** requireAuth, the role check, the courses_v2 flag, then a database and the caller's users row. */
+    guard: (...roles) => [requireAuth, requireRole(...roles), requireCourses, requireDb(db), syncUser],
   };
 }

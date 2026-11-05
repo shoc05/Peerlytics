@@ -16,6 +16,7 @@ Every advanced feature sits behind a flag in **Firebase Remote Config**. If a fl
 | `push_enabled` | boolean | `false` | Sangay (3.8) | No push permission prompt; in-app and email notifications only |
 | `csv_invite_enabled` | boolean | `false` | Kezang (3.6) | No CSV upload; invites are one by one |
 | `docx_export_enabled` | boolean | `false` | Ngawang (4.4) | No "Download .docx" button |
+| `courses_v2` | boolean | `false` | Sonam (6.1, 6.3) | No Courses tab, and the course and submission routes answer 404 `FEATURE_DISABLED`. The backend also copies this flag to Firestore `config/flags`: when on, the rules refuse workspaces created in the browser, so **turn it on only after step 6.4** replaces the New Workspace buttons |
 | `licensing_enabled` | boolean | `false` | Tshewang (3.10) | No **Colleges and licences** tab and no `/api/admin/colleges` routes (404 `FEATURE_DISABLED`). When on, licences are recorded but limits are not enforced yet |
 | `peer_eval_enabled` | boolean | `false` | Sonam (3.7) | No peer evaluation form |
 | `course_dashboard_enabled` | boolean | `false` | Ngawang (4.8) | No course dashboard or comparison |

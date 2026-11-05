@@ -11,6 +11,7 @@ export const FLAG_DEFAULTS = Object.freeze({
   push_enabled: false,
   csv_invite_enabled: false,
   docx_export_enabled: false,
+  courses_v2: false,
   licensing_enabled: false,
   peer_eval_enabled: false,
   course_dashboard_enabled: false,
