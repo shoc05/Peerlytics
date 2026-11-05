@@ -826,7 +826,7 @@ const PeerlyticsDashboard = () => {
       }}>
         <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 28px', borderBottom: `1px solid ${darkMode ? '#2e2e2e' : '#e0e0e0'}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontWeight: 800, fontSize: 18 }}>
-            <span style={{ background: 'linear-gradient(135deg,#1D9E75,#0F6E56)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Peerlytics</span>
+            <Logo variant="banner" darkMode={darkMode} height={44} width="auto" />
             <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: '#6c5ce7', borderRadius: 4, padding: '2px 8px' }}>ADMIN</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
