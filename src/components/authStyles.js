@@ -1,9 +1,10 @@
+// The green page background from peerlytics-theme.css, for the theme in use.
+export const pageBackground = (darkMode = false) => (darkMode ? 'var(--pl-page-dark)' : 'var(--pl-page-light)');
+
 export const authPageStyle = (darkMode = false) => ({
   minHeight: '100vh',
   position: 'relative',
-  background: darkMode
-    ? 'linear-gradient(135deg, #242424 0%, #2e2e2e 100%)'
-    : 'linear-gradient(160deg, #f0f7f4 0%, #e8f0eb 50%, #dce8e0 100%)',
+  background: pageBackground(darkMode),
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import Logo from './Logo';
 import RolePicker from './RolePicker';
 import { useThemePreference } from '../hooks/useThemePreference';
+import { pageBackground } from './authStyles';
 
 export default function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -14,9 +15,7 @@ export default function ProtectedRoute({ children }) {
       <div
         style={{
           minHeight: '100vh',
-          background: darkMode
-            ? 'linear-gradient(135deg, #0d0d0d 0%, #1c1c1c 100%)'
-            : 'linear-gradient(160deg, #f0f7f4 0%, #e8f0eb 100%)',
+          background: pageBackground(darkMode),
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',

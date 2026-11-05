@@ -5,6 +5,7 @@ import Logo from './Logo';
 import UserAvatar from './UserAvatar';
 // Heavy panels are code-split: TipTap (WorkspacePanel/Drive), Recharts (AnalyticsPanel),
 // and the secondary panels load on demand, shrinking the initial bundle.
+import { pageBackground } from './authStyles';
 const WorkspacePanel = lazy(() => import('./WorkspacePanel'));
 const WorkspaceDrive = lazy(() => import('./WorkspaceDrive'));
 const AnalyticsPanel = lazy(() => import('./AnalyticsPanel'));
@@ -820,7 +821,7 @@ const PeerlyticsDashboard = () => {
   if (isAdmin) {
     return (
       <div style={{
-        background: darkMode ? '#0d0d0d' : '#f0f7f4', color: darkMode ? '#ededed' : '#1a2e24',
+        background: pageBackground(darkMode), color: darkMode ? '#ededed' : '#1a2e24',
         minHeight: '100vh', fontFamily: '"Segoe UI", "Helvetica Neue", Arial, sans-serif',
       }}>
         <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 28px', borderBottom: `1px solid ${darkMode ? '#2e2e2e' : '#e0e0e0'}` }}>
@@ -850,7 +851,7 @@ const PeerlyticsDashboard = () => {
   return (
    <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: darkMode ? '#9a9a9a' : '#666' }}>Loading…</div>}>
     <div style={{
-      background: darkMode ? '#0d0d0d' : '#f0f7f4',
+      background: pageBackground(darkMode),
       color: darkMode ? '#ededed' : '#1a2e24',
       minHeight: '100vh',
       fontFamily: '"Segoe UI", "Helvetica Neue", Arial, sans-serif',
