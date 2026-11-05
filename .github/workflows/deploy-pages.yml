@@ -78,4 +78,8 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
+        # Pages names a deployment after GITHUB_SHA, which on workflow_run is main's commit. While
+        # main stays put every deployment has the same name, and the site didn't change.
+        env:
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

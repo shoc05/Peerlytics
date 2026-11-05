@@ -211,7 +211,7 @@ Licensing is not finished. What exists is the `licences` table in PostgreSQL (pl
 
 ## Deployment
 
-Staging and production both run on one PC, not a cloud VM: WSL2 Ubuntu with Docker Desktop and a GitHub self-hosted runner (`DEPLOY_MODE=local`). Full steps are in `docs/deploy.md`.
+Staging and production both run on one PC, not a cloud VM, and a Tailscale Funnel tunnel can give the production API a public address: WSL2 Ubuntu with Docker Desktop and a GitHub self-hosted runner (`DEPLOY_MODE=local`). Full steps are in `docs/deploy.md`.
 
 | | Trigger | Website | API |
 |---|---|---|---|
@@ -220,7 +220,7 @@ Staging and production both run on one PC, not a cloud VM: WSL2 Ubuntu with Dock
 
 Limits of this setup:
 
-- The API addresses only exist on that PC, so features that need the backend only work there, and only while it is on.
+- Without the tunnel, the API addresses only exist on that PC. With it, the production API is public, but only while the PC is on. See `docs/deploy.md`.
 - A deploy waits until the PC, Docker Desktop and the runner (`cd ~/actions-runner && ./run.sh` in Ubuntu) are all running.
 - On a free GitHub plan, the repository must be public for the staging website and the production approval step to work.
 - There is one machine and no high availability. Production's blue/green switch and `infra/scripts/rollback.sh prod` cover a bad release, not the PC going down.

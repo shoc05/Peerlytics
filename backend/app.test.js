@@ -160,6 +160,29 @@ describe('sign-in on the analysis routes', () => {
   });
 });
 
+test('behind two proxies, each visitor gets their own rate limit', async () => {
+  const app = createApp({
+    config: loadConfig({ TRUST_PROXY_HOPS: '2' }),
+    db: fakeDb,
+    metrics: createMetrics({ registry: new client.Registry() }),
+    getClients,
+  });
+  const s = await new Promise((resolve) => {
+    const srv = app.listen(0, () => resolve(srv));
+  });
+  const send = (visitor) =>
+    fetch(`http://127.0.0.1:${s.address().port}/api/check`, {
+      method: 'POST',
+      headers: { 'X-Forwarded-For': `${visitor}, 172.18.0.5` },
+    });
+  for (let i = 0; i < 20; i += 1) await send('203.0.113.1');
+  const first = await send('203.0.113.1');
+  const second = await send('203.0.113.2');
+  await new Promise((resolve) => s.close(resolve));
+  assert.equal(first.status, 429);
+  assert.equal(second.status, 401);
+});
+
 test('security headers are set and Express is not named', async () => {
   const res = await fetch(`${baseUrl}/api/health`);
   assert.ok(res.headers.get('content-security-policy'));

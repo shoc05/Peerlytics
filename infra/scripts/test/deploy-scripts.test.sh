@@ -109,6 +109,22 @@ check "the colour that never ran is stopped" grep -q 'stop backend_blue$' "$CALL
 check "rollback.sh has nothing to switch to" fails rollback prod
 unset FAIL_TAG FAIL_SERVICE
 
+# ── The tunnel ──
+setup
+printf 'PROD_DOMAIN=http://prod.localhost\n' > "$ROOT/edge.env"
+tunnel_setup() { TS_AUTHKEY="$1" bash "$SCRIPTS/setup-tunnel.sh" > "$ROOT/out" 2>&1; }
+check "a bad auth key is refused" fails tunnel_setup not-a-key
+check "and is not kept" test ! -s "$ROOT/tunnel.env"
+check "a good key sets up the tunnel" tunnel_setup tskey-auth-test
+check "the key is in tunnel.env" file_is "$ROOT/tunnel.env" "TS_AUTHKEY=tskey-auth-test"
+check "the key is not printed" fails grep -q tskey "$ROOT/out"
+check "Caddy answers on both names" file_is "$ROOT/edge.env" "PROD_DOMAIN=http://prod.localhost, http://peerlytics.example.ts.net"
+check "the backend looks two hops back" has_line "$ROOT/.env.prod" "TRUST_PROXY_HOPS=2"
+check "it prints the public address" grep -q "https://peerlytics.example.ts.net" "$ROOT/out"
+check "running it again is safe" tunnel_setup ignored
+check "and changes nothing" file_is "$ROOT/edge.env" "PROD_DOMAIN=http://prod.localhost, http://peerlytics.example.ts.net"
+check "the hops line is not repeated" test "$(grep -c TRUST_PROXY_HOPS "$ROOT/.env.prod")" = 1
+
 echo
 if ((failures)); then
   echo "$failures failed"

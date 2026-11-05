@@ -22,6 +22,7 @@ const schema = z.object({
   PORT: z.preprocess(emptyAsUndefined, z.coerce.number().int().min(1).max(65535).default(5000)),
   // Unset keeps today's behaviour (reflect any origin). Step 1.4 (Tshewang) makes it required.
   CORS_ORIGIN: optionalString,
+  TRUST_PROXY_HOPS: z.preprocess(emptyAsUndefined, z.coerce.number().int().min(0).max(5).default(1)),
   DATABASE_URL: z.preprocess(
     emptyAsUndefined,
     z
@@ -50,6 +51,7 @@ export function loadConfig(env = process.env) {
     env: e.NODE_ENV,
     port: e.PORT,
     corsOrigin: e.CORS_ORIGIN ?? true,
+    trustProxyHops: e.TRUST_PROXY_HOPS,
     databaseUrl: e.DATABASE_URL ?? null,
     databasePoolMax: e.DATABASE_POOL_MAX,
     runJobs: e.RUN_JOBS === 'true',
