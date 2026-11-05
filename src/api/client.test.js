@@ -42,6 +42,24 @@ test('POST bodies are JSON and keep the token', async () => {
   assert.deepEqual(JSON.parse(calls[0].init.body), { role: 'lecturer' });
 });
 
+test('the admin calls use the right paths, methods and bodies', async () => {
+  const { fetchImpl, calls } = stubFetch({ body: {} });
+  const api = createApi(createApiClient({ fetchImpl, getUser: () => user('tok') }));
+  await api.setUserRole('a/b', 'lecturer');
+  await api.listColleges();
+  await api.createCollege({ name: 'CST', slug: 'cst' });
+  await api.addLicence('c1', { plan: 'trial' });
+  assert.deepEqual(calls.map((c) => [c.init.method ?? 'GET', c.url]), [
+    ['POST', '/api/admin/users/a%2Fb/role'],
+    ['GET', '/api/admin/colleges'],
+    ['POST', '/api/admin/colleges'],
+    ['POST', '/api/admin/colleges/c1/licences'],
+  ]);
+  assert.deepEqual(JSON.parse(calls[0].init.body), { role: 'lecturer' });
+  assert.deepEqual(JSON.parse(calls[2].init.body), { name: 'CST', slug: 'cst' });
+  for (const call of calls) assert.equal(call.init.headers.Authorization, 'Bearer tok');
+});
+
 test('/api/health is the one call sent without a token', async () => {
   const { fetchImpl, calls } = stubFetch({ body: { status: 'ok' } });
   const api = createApi(createApiClient({ fetchImpl, getUser: () => user() }));

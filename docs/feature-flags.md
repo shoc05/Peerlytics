@@ -16,7 +16,7 @@ Every advanced feature sits behind a flag in **Firebase Remote Config**. If a fl
 | `push_enabled` | boolean | `false` | Sangay (3.8) | No push permission prompt; in-app and email notifications only |
 | `csv_invite_enabled` | boolean | `false` | Kezang (3.6) | No CSV upload; invites are one by one |
 | `docx_export_enabled` | boolean | `false` | Ngawang (4.4) | No "Download .docx" button |
-| `licensing_enabled` | boolean | `false` | Tshewang (3.10) | No licence or usage limits |
+| `licensing_enabled` | boolean | `false` | Tshewang (3.10) | No **Colleges and licences** tab and no `/api/admin/colleges` routes (404 `FEATURE_DISABLED`). When on, licences are recorded but limits are not enforced yet |
 | `peer_eval_enabled` | boolean | `false` | Sonam (3.7) | No peer evaluation form |
 | `course_dashboard_enabled` | boolean | `false` | Ngawang (4.8) | No course dashboard or comparison |
 | `dzongkha_enabled` | boolean | `false` | Ngawang (UI) | English interface only |

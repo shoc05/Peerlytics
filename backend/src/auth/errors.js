@@ -11,6 +11,10 @@ const MESSAGES = {
   CANNOT_CHANGE_OWN_ROLE: 'You cannot change your own role.',
   USER_NOT_FOUND: 'That user does not exist.',
   AUTH_UNAVAILABLE: 'Sign-in checks are not configured on the server.',
+  NOT_FOUND: 'Not found.',
+  FEATURE_DISABLED: 'This feature is not turned on.',
+  DATABASE_UNAVAILABLE: 'The database is not available.',
+  SLUG_TAKEN: 'Another college already uses that short name.',
 };
 
 export function sendError(res, status, code, details) {
