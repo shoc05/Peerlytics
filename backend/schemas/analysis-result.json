@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://peerlytics.app/schemas/analysis-result.json",
+  "title": "Analysis result",
+  "description": "What a provider returns for one submission, before it is written once to analysis_results (docs/db-schema.md). OpenAI is asked for exactly this shape with structured output; the legacy provider (Hugging Face + Virtual Writing Tutor) is mapped to it. Every field is required; null means that part was not available. Ajv checks every result against this file before it is saved.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ai_likelihood", "flagged_sentences", "writing_quality", "writing_feedback", "difficulty", "grade_explanation"],
+  "properties": {
+    "ai_likelihood": {
+      "description": "How likely the text is to be AI-generated, 0-100. A signal, not proof.",
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 100
+    },
+    "flagged_sentences": {
+      "description": "Sentences copied word for word from the text that read as AI-generated, each with a short reason.",
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sentence", "reason"],
+        "properties": {
+          "sentence": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      }
+    },
+    "writing_quality": {
+      "description": "Overall writing quality, 0-10.",
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 10
+    },
+    "writing_feedback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strengths", "weaknesses", "summary"],
+      "properties": {
+        "strengths": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 300 } },
+        "weaknesses": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 300 } },
+        "summary": { "type": "string", "maxLength": 1000 }
+      }
+    },
+    "difficulty": {
+      "description": "How demanding the content is: 1 = easy, 2 = medium, 3 = hard.",
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "maximum": 3
+    },
+    "grade_explanation": {
+      "description": "Plain-English explanation of the writing-quality score, for the student and lecturer.",
+      "type": ["string", "null"],
+      "maxLength": 4000
+    }
+  }
+}

@@ -16,6 +16,8 @@
     "migrate:create": "npm run migrate -- create --migration-file-language js"
   },
   "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "axios": "^1.16.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

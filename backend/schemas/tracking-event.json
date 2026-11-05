@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://peerlytics.app/schemas/tracking-event.json",
+  "title": "Tracking event",
+  "description": "One event in a POST /api/workspaces/{workspaceId}/events batch. Only time, counts, lengths and classes are accepted: never typed or pasted text (CLAUDE.md hard rule; docs/privacy-notice.md). Any extra field, including contentSnippet or content, makes the event invalid, and invalid events are dropped.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "payload", "at"],
+  "properties": {
+    "kind": { "enum": ["metric", "paste", "version"] },
+    "at": {
+      "description": "When it happened on the device, in ms since the epoch (events queued offline are sent later).",
+      "type": "integer",
+      "minimum": 1577836800000
+    },
+    "payload": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "metric" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "timeSpent": { "description": "Active writing time in minutes (fractions allowed), as the editor measures it.", "type": "number", "minimum": 0, "maximum": 600 },
+              "edits": { "type": "integer", "minimum": 0, "maximum": 100000 },
+              "tabId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "paste" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["fileId", "length", "changeType"],
+            "properties": {
+              "fileId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+              "length": { "description": "Number of characters pasted.", "type": "integer", "minimum": 1, "maximum": 10000000 },
+              "changeType": { "enum": ["paste-small", "paste-large"] },
+              "tabId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "version" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["fileId", "wordCount"],
+            "properties": {
+              "fileId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+              "wordCount": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+              "tabId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
