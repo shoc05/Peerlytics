@@ -15,6 +15,19 @@
   --pl-text-muted: #5f6f66;
   --pl-shadow: 0 2px 12px rgba(45, 74, 62, 0.08);
   --pl-radius: 12px;
+
+  /* Page backgrounds. The greens come from the gradient in public/logo.png. */
+  --pl-logo-green-light: #7ec084;
+  --pl-logo-green: #66ba96;
+  --pl-page-light:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 900' preserveAspectRatio='xMidYMid slice'%3E%3Cpath fill='rgba%28102%2C186%2C150%2C0.13%29' d='M0 640C180 560 330 610 470 700S760 850 880 900H0Z'/%3E%3Cpath fill='rgba%28126%2C192%2C132%2C0.12%29' d='M0 760C200 700 380 760 560 830S800 890 900 900H0Z'/%3E%3Cpath fill='rgba%28102%2C186%2C150%2C0.13%29' d='M1440 250C1280 330 1130 280 1000 190S760 40 660 0H1440Z'/%3E%3Cpath fill='rgba%28126%2C192%2C132%2C0.12%29' d='M1440 130C1270 190 1110 150 960 80S820 15 760 0H1440Z'/%3E%3Cg stroke='%2366BA96' stroke-opacity='0.28' stroke-width='1' fill='none'%3E%3Cline x1='92' y1='118' x2='214' y2='62'/%3E%3Cline x1='214' y1='62' x2='300' y2='172'/%3E%3Cline x1='92' y1='118' x2='132' y2='262'/%3E%3Cline x1='92' y1='118' x2='300' y2='172'/%3E%3Cline x1='1176' y1='716' x2='1296' y2='642'/%3E%3Cline x1='1296' y1='642' x2='1368' y2='782'/%3E%3Cline x1='1176' y1='716' x2='1232' y2='842'/%3E%3Cline x1='1368' y1='782' x2='1232' y2='842'/%3E%3C/g%3E%3Cg fill='%2366BA96' fill-opacity='0.42'%3E%3Ccircle cx='92' cy='118' r='3'/%3E%3Ccircle cx='214' cy='62' r='3'/%3E%3Ccircle cx='300' cy='172' r='3'/%3E%3Ccircle cx='132' cy='262' r='3'/%3E%3Ccircle cx='1176' cy='716' r='3'/%3E%3Ccircle cx='1296' cy='642' r='3'/%3E%3Ccircle cx='1368' cy='782' r='3'/%3E%3Ccircle cx='1232' cy='842' r='3'/%3E%3C/g%3E%3C/svg%3E") center / cover no-repeat fixed,
+    radial-gradient(ellipse 60% 55% at 50% 45%, rgba(255, 255, 255, 0.85), transparent 100%) fixed,
+    linear-gradient(160deg, #f8fcf9 0%, #eaf6ef 55%, #deefe6 100%) fixed;
+  --pl-page-dark:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 900' preserveAspectRatio='xMidYMid slice'%3E%3Cpath fill='rgba%28102%2C186%2C150%2C0.09%29' d='M0 640C180 560 330 610 470 700S760 850 880 900H0Z'/%3E%3Cpath fill='rgba%28126%2C192%2C132%2C0.07%29' d='M0 760C200 700 380 760 560 830S800 890 900 900H0Z'/%3E%3Cpath fill='rgba%28102%2C186%2C150%2C0.09%29' d='M1440 250C1280 330 1130 280 1000 190S760 40 660 0H1440Z'/%3E%3Cpath fill='rgba%28126%2C192%2C132%2C0.07%29' d='M1440 130C1270 190 1110 150 960 80S820 15 760 0H1440Z'/%3E%3Cg stroke='%237EC084' stroke-opacity='0.2' stroke-width='1' fill='none'%3E%3Cline x1='92' y1='118' x2='214' y2='62'/%3E%3Cline x1='214' y1='62' x2='300' y2='172'/%3E%3Cline x1='92' y1='118' x2='132' y2='262'/%3E%3Cline x1='92' y1='118' x2='300' y2='172'/%3E%3Cline x1='1176' y1='716' x2='1296' y2='642'/%3E%3Cline x1='1296' y1='642' x2='1368' y2='782'/%3E%3Cline x1='1176' y1='716' x2='1232' y2='842'/%3E%3Cline x1='1368' y1='782' x2='1232' y2='842'/%3E%3C/g%3E%3Cg fill='%237EC084' fill-opacity='0.34'%3E%3Ccircle cx='92' cy='118' r='3'/%3E%3Ccircle cx='214' cy='62' r='3'/%3E%3Ccircle cx='300' cy='172' r='3'/%3E%3Ccircle cx='132' cy='262' r='3'/%3E%3Ccircle cx='1176' cy='716' r='3'/%3E%3Ccircle cx='1296' cy='642' r='3'/%3E%3Ccircle cx='1368' cy='782' r='3'/%3E%3Ccircle cx='1232' cy='842' r='3'/%3E%3C/g%3E%3C/svg%3E") center / cover no-repeat fixed,
+    radial-gradient(ellipse 45% 40% at 90% 8%, rgba(102, 186, 150, 0.14), transparent 100%) fixed,
+    radial-gradient(ellipse 45% 40% at 8% 92%, rgba(126, 192, 132, 0.1), transparent 100%) fixed,
+    linear-gradient(160deg, #0a1f18 0%, #07150f 55%, #050f0b 100%) fixed;
 }
 
 body {
