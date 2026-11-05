@@ -1,0 +1,47 @@
+{
+  "label": "prod-bluegreen-v1.1.0",
+  "base_url": "http://prod.localhost",
+  "started_at": "2026-11-05T17:22:23.560Z",
+  "finished_at": "2026-11-05T17:22:23.560Z",
+  "duration": "6m",
+  "rate_per_route": 5,
+  "signed_in": false,
+  "total": {
+    "requests": 3601,
+    "failed": 0,
+    "failed_percent": 0,
+    "p95_ms": 6.4,
+    "median_ms": 3.9,
+    "max_ms": 112.8
+  },
+  "routes": {
+    "health": {
+      "requests": 1801,
+      "failed": 0,
+      "failed_percent": 0,
+      "p95_ms": 7.1,
+      "median_ms": 4.6,
+      "max_ms": 112.8
+    },
+    "auth_me": {
+      "requests": 1800,
+      "failed": 0,
+      "failed_percent": 0,
+      "p95_ms": 4.5,
+      "median_ms": 3.1,
+      "max_ms": 110.7
+    }
+  },
+  "first_failure_at": null,
+  "last_failure_at": null,
+  "thresholds_ok": {
+    "http_req_failed{route:auth_me}: rate<0.01": true,
+    "http_req_failed{route:health}: rate<0.01": true,
+    "http_req_duration{route:auth_me}: p(95)<1000": true,
+    "http_req_duration: p(95)<1000": true,
+    "http_reqs{route:auth_me}: count>0": true,
+    "http_req_duration{route:health}: p(95)<1000": true,
+    "http_req_failed: rate<0.01": true,
+    "http_reqs{route:health}: count>0": true
+  }
+}
