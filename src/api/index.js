@@ -19,7 +19,7 @@ const client = createApiClient({
 });
 
 export const { authHeaders, request } = client;
-export const { chooseRole, getMe, grantExtension, submitForCheck, healthCheck } = createApi(client, { warn: logger.warn });
+export const { addLicence, chooseRole, createCollege, getMe, grantExtension, listColleges, setUserRole, submitForCheck, healthCheck } = createApi(client, { warn: logger.warn });
 
 // Course site (step 1.7). The backend has no course routes yet (step 2.1 adds them with
 // backend/openapi.yaml), so this stays null and the Courses tab says "Not available yet".

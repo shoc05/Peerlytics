@@ -388,7 +388,8 @@ Index: `(target_type, target_id, created_at DESC)`, `(actor_id, created_at DESC)
 
 | Table | Main routes in `backend/openapi.yaml` |
 |---|---|
-| colleges, licences, college_domains | Read by the usage, licensing and sign-up checks; no public CRUD in this contract |
+| colleges, licences | `/admin/colleges`, `/admin/colleges/{collegeId}/licences` (superAdmin, behind `licensing_enabled`) |
+| college_domains | Read by the sign-up checks; no public CRUD in this contract |
 | users | `/auth/*`, `/me/data`, `/admin/users/{uid}/*` |
 | courses, enrolments | `/courses`, `/courses/join`, `/courses/{courseId}`, `/courses/{courseId}/join-code`, `/courses/{courseId}/members` |
 | announcements | `/courses/{courseId}/announcements`, `/announcements/{announcementId}` |
