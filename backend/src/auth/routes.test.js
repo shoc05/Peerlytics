@@ -176,13 +176,21 @@ describe('POST /api/admin/users/:uid/role', () => {
   test('a superAdmin sets any role, writes the mirror and revokes the old tokens', async () => {
     const r = await call('POST', '/api/admin/users/stu-1/role', {
       token: 'adminTok',
-      body: { role: 'collegeAdmin', collegeId: 'cst' },
+      body: { role: 'collegeAdmin', collegeId: '0b5c1f9e-2a71-4c8e-9d3b-6e0f4a2c7b11' },
     });
     assert.equal(r.status, 200);
-    assert.deepEqual(r.body, { uid: 'stu-1', role: 'collegeAdmin', collegeId: 'cst' });
-    assert.deepEqual(clients.auth.users['stu-1'].customClaims, { role: 'collegeAdmin', collegeId: 'cst' });
+    assert.deepEqual(r.body, { uid: 'stu-1', role: 'collegeAdmin', collegeId: '0b5c1f9e-2a71-4c8e-9d3b-6e0f4a2c7b11' });
+    assert.deepEqual(clients.auth.users['stu-1'].customClaims, { role: 'collegeAdmin', collegeId: '0b5c1f9e-2a71-4c8e-9d3b-6e0f4a2c7b11' });
     assert.equal(clients.db.store.get('users/stu-1').role, 'collegeAdmin');
+    assert.equal(clients.db.store.get('users/stu-1').collegeId, '0b5c1f9e-2a71-4c8e-9d3b-6e0f4a2c7b11', 'mirrored for the Users tab');
     assert.deepEqual(clients.auth.calls.revokeRefreshTokens, ['stu-1']);
+  });
+
+  test('a collegeAdmin needs a college, and a college must be one from the list', async () => {
+    const none = await call('POST', '/api/admin/users/stu-1/role', { token: 'adminTok', body: { role: 'collegeAdmin' } });
+    assert.deepEqual([none.status, none.body.code], [400, 'INVALID_BODY']);
+    const bad = await call('POST', '/api/admin/users/stu-1/role', { token: 'adminTok', body: { role: 'lecturer', collegeId: 'cst' } });
+    assert.deepEqual([bad.status, bad.body.code], [400, 'INVALID_BODY']);
   });
 
   test('collegeId defaults to null', async () => {

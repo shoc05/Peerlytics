@@ -43,7 +43,7 @@ const SUBMISSION_SELECT = `
  * @param deps { analysis: createAnalysisService(...), store: createWorkspaceStore(...) }
  */
 export function createSubmissionRouter(ctx, { analysis, store, submitLimit, eventLimit }) {
-  const { db, guard, now } = ctx;
+  const { db, guard, now, requireCovered } = ctx;
   const router = express.Router();
   const limitSubmit = submitLimit ?? createUserRateLimit({ max: 5, windowMs: 60_000, now });
   const limitEvents = eventLimit ?? createUserRateLimit({ max: 60, windowMs: 60_000, now });
@@ -77,6 +77,8 @@ export function createSubmissionRouter(ctx, { analysis, store, submitLimit, even
     handler(async (req, res) => {
       limitSubmit(req.user.uid);
       const access = await openWorkspaceForMember(req);
+      // Read-only (D3): a course whose owner isn't covered can't take new submissions.
+      await requireCovered(db.pool, access.course.owner_id);
       const body = parse(submitBody, req.body);
       const workspaceId = access.workspace.id;
 
@@ -178,6 +180,7 @@ export function createSubmissionRouter(ctx, { analysis, store, submitLimit, even
     handler(async (req, res) => {
       const access = await submissionAccess(req);
       mustTeach(access);
+      await requireCovered(db.pool, access.course.owner_id);
       const { provider } = parse(rerunBody, req.body);
       const { rows: recent } = await db.pool.query(
         `SELECT created_at FROM analysis_results

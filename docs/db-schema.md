@@ -48,6 +48,14 @@ erDiagram
   grades ||--o{ overrides : "append-only"
   workspaces ||--o{ peer_evaluations : ""
   colleges ||--o{ usage : ""
+  plans ||--o{ payment_requests : ""
+  payment_methods ||--o{ payment_requests : ""
+  colleges ||--o{ payment_requests : pays
+  payment_requests ||--o| subscriptions : "approved into"
+  colleges ||--o{ subscriptions : ""
+  plans ||--o{ subscriptions : ""
+  colleges ||--o{ seat_assignments : ""
+  users ||--o{ seat_assignments : "lecturer"
 ```
 
 ## Tables
@@ -358,6 +366,104 @@ One row per paid external call (SO4 writes it; step 3.10 reports it). This is ho
 
 Index: `(college_id, created_at)` for "this month's spend".
 
+### plans
+
+What a college can buy (step 6.7). No seed rows: the superAdmin adds them. Hidden with `is_active = false`, never deleted once used (requests and subscriptions point at them with `ON DELETE RESTRICT`).
+
+| Column | Type | Null / default | Notes |
+|---|---|---|---|
+| id | uuid | PK | |
+| name | text | NOT NULL | 2–100 chars; unique ignoring case (`plans_name_key`) |
+| price_nu | numeric(12,2) | NOT NULL | > 0, in ngultrum |
+| duration_days | integer | NOT NULL | 1–1100 |
+| seats | integer | NOT NULL | Lecturer seats, 1–100000 |
+| max_courses | integer | NULL | Courses per seat; NULL = no limit |
+| monthly_ai_analyses | integer | NULL | Step 6.11; NULL = no limit |
+| is_active | boolean | NOT NULL, true | Shown to colleges |
+| manual_only | boolean | NOT NULL, false | Only a superAdmin can grant it (pilots) |
+| created_by | text | NULL, FK users ON DELETE SET NULL | |
+| created_at, updated_at | timestamptz | NOT NULL, now() | |
+
+### payment_methods
+
+The ways a college says it paid (mBoB, BNB mPay, TPay, DK Bank, BDBL, bank transfer). Starts empty.
+
+| Column | Type | Null / default | Notes |
+|---|---|---|---|
+| id | uuid | PK | |
+| name | text | NOT NULL | 2–60 chars; unique ignoring case |
+| is_active | boolean | NOT NULL, true | |
+| created_at, updated_at | timestamptz | NOT NULL, now() | |
+
+### payment_settings
+
+At most one row (`id = 1`, checked). Until a superAdmin saves it, the app uses `grace_days = 7` and no bank details.
+
+| Column | Type | Null / default | Notes |
+|---|---|---|---|
+| id | smallint | PK, 1 | CHECK (id = 1) |
+| account_name, account_number, bank | text | NULL | Shown on the payment form |
+| qr_image_path | text | NULL | Reserved; no uploads yet (D2) |
+| verification_message, refund_policy | text | NULL | Shown on the payment form |
+| grace_days | integer | NOT NULL, 7 | 0–60 |
+| updated_by | text | NULL, FK users ON DELETE SET NULL | |
+| updated_at | timestamptz | NOT NULL, now() | |
+
+### payment_requests
+
+A collegeAdmin's claim that the college paid. Nothing activates until a superAdmin approves it.
+
+| Column | Type | Null / default | Notes |
+|---|---|---|---|
+| id | uuid | PK | |
+| payer_id | text | NOT NULL, FK users | The collegeAdmin |
+| college_id | uuid | NOT NULL, FK colleges | Colleges are the only buyers (D1) |
+| plan_id | uuid | NOT NULL, FK plans | Fixed at submission |
+| reference_code | text | NOT NULL, UNIQUE | `^PL-[A-HJKMNP-Z2-9]{6}$`, made by the server |
+| amount_nu | numeric(12,2) | NOT NULL | Copied from the plan's price at submission |
+| payment_method_id | uuid | NOT NULL, FK payment_methods | |
+| journal_number | text | NOT NULL | Upper case, no spaces: `^[A-Z0-9-]{4,40}$` |
+| paid_on | date | NOT NULL | Not after today in Bhutan (checked by the API) |
+| status | text | NOT NULL, 'pending' | `pending`, `approved`, `rejected`, `cancelled`; the last three are final |
+| reject_reason | text | NULL | 5–500 chars; set exactly when `rejected` |
+| reviewed_by | text | NULL, FK users ON DELETE SET NULL | |
+| reviewed_at | timestamptz | NULL | NULL while `pending` |
+| created_at | timestamptz | NOT NULL, now() | |
+
+Index: **`payment_requests_journal_key` UNIQUE (`payment_method_id`, `journal_number`) WHERE status IN ('pending', 'approved')**, so a number can be used again only after rejection or cancellation (D8), and two requests at once can't both get in. Also `(status, created_at)`, `(college_id, created_at DESC)`, `(payer_id, status)`.
+
+### subscriptions
+
+A period a college is covered. Renewals are new rows. Status is worked out from the dates (`backend/src/billing/status.js`), never stored.
+
+| Column | Type | Null / default | Notes |
+|---|---|---|---|
+| id | uuid | PK | |
+| college_id | uuid | NOT NULL, FK colleges | |
+| plan_id | uuid | NOT NULL, FK plans | Its seats and course limit apply |
+| payment_request_id | uuid | NULL, UNIQUE, FK payment_requests | Set exactly when `grant_type = 'paid'`; UNIQUE is the backstop against double approval |
+| starts_at, ends_at | timestamptz | NOT NULL | `ends_at > starts_at`; extend changes `ends_at` |
+| grant_type | text | NOT NULL | `paid` or `manual` |
+| note | text | NULL | The reason for a manual grant |
+| revoked_at, revoke_reason | timestamptz, text | NULL | Set together; revoked is final |
+| created_by | text | NULL, FK users ON DELETE SET NULL | |
+| created_at | timestamptz | NOT NULL, now() | |
+
+### seat_assignments
+
+Which lecturers a college has given a seat. **Change from the spec:** seats belong to the college, not one subscription row, so a renewal (a new row) keeps them. The limit is the seat count of the subscription in effect.
+
+| Column | Type | Null / default | Notes |
+|---|---|---|---|
+| id | uuid | PK | |
+| college_id | uuid | NOT NULL, FK colleges | |
+| lecturer_id | text | NOT NULL, FK users ON DELETE CASCADE | |
+| assigned_by, removed_by | text | NULL, FK users ON DELETE SET NULL | |
+| assigned_at | timestamptz | NOT NULL, now() | |
+| removed_at | timestamptz | NULL | A removed seat still counts for `grace_days` |
+
+Index: `seat_assignments_one_open_seat` UNIQUE (`lecturer_id`) WHERE `removed_at IS NULL`: one open seat per lecturer.
+
 ### audit_log
 
 **Append-only.** Who did what. Role changes (auth contract §5), extensions, overrides, auto groups, join-code changes and data deletions are written here. It holds ids and changed fields, never document text.
@@ -366,7 +472,7 @@ Index: `(college_id, created_at)` for "this month's spend".
 |---|---|---|---|
 | id | bigint | PK, generated always as identity | |
 | actor_id | text | NULL, FK users ON DELETE SET NULL | NULL = the system (deadline job, migrations) |
-| action | text | NOT NULL | Dotted name, e.g. `role.changed`, `deadline.extended`, `grade.overridden`, `groups.auto_created`, `course.join_code_reset`, `user.data_deleted` |
+| action | text | NOT NULL | Dotted name, e.g. `role.changed`, `deadline.extended`, `grade.overridden`, `groups.auto_created`, `course.join_code_reset`, `user.data_deleted`; billing: `plan.created`, `plan.updated`, `payment_method.created`, `payment_method.updated`, `payment_settings.updated`, `payment.requested`, `payment.approved`, `payment.rejected`, `payment.cancelled`, `subscription.granted`, `subscription.extended`, `subscription.revoked`, `college.lecturer_added`, `college.lecturer_removed`, `seat.assigned`, `seat.removed` |
 | target_type | text | NOT NULL | e.g. `user`, `workspace`, `grade`, `course` |
 | target_id | text | NOT NULL | |
 | details | jsonb | NOT NULL, '{}' | e.g. `{ "from": "student", "to": "lecturer" }` |
@@ -388,7 +494,11 @@ Index: `(target_type, target_id, created_at DESC)`, `(actor_id, created_at DESC)
 
 | Table | Main routes in `backend/openapi.yaml` |
 |---|---|
-| colleges, licences | `/admin/colleges`, `/admin/colleges/{collegeId}/licences` (superAdmin, behind `licensing_enabled`) |
+| colleges, licences | `/admin/colleges` (superAdmin, behind `licensing_enabled` or `billing_enabled`), `/admin/colleges/{collegeId}/licences` (behind `licensing_enabled`) |
+| plans, payment_methods, payment_settings | `/admin/billing/plans`, `/admin/billing/methods`, `/admin/billing/settings` (superAdmin); `/college/billing` (collegeAdmin, read) |
+| payment_requests | `/college/payment-requests` (collegeAdmin), `/admin/billing/requests` and `/{id}/approve`, `/reject`, `/cancel` (superAdmin) |
+| subscriptions | `/admin/billing/colleges`, `/admin/billing/colleges/{id}/grants`, `/admin/billing/subscriptions/{id}/extend`, `/revoke` (superAdmin); read by every route that needs coverage |
+| seat_assignments | `/college`, `/college/lecturers`, `/college/seats/{uid}` (collegeAdmin), `/billing/me` |
 | college_domains | Read by the sign-up checks; no public CRUD in this contract |
 | users | `/auth/*`, `/me/data`, `/admin/users/{uid}/*` |
 | courses, enrolments | `/courses`, `/courses/join`, `/courses/{courseId}`, `/courses/{courseId}/join-code`, `/courses/{courseId}/members` |

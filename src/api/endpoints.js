@@ -44,9 +44,15 @@ export function createApi(client, { warn = () => {} } = {}) {
     grantExtension: (groupId, { deadline, reason }) =>
       client.request(`/api/groups/${encodeURIComponent(groupId)}/extension`, { method: 'POST', body: { deadline, reason } }),
 
-    /** superAdmin: set someone else's role. They are signed out and must sign in again. */
-    setUserRole: (uid, role) =>
-      client.request(`/api/admin/users/${encodeURIComponent(uid)}/role`, { method: 'POST', body: { role } }),
+    /**
+     * superAdmin: set someone else's role, and for a collegeAdmin or lecturer their college.
+     * They are signed out and must sign in again.
+     */
+    setUserRole: (uid, role, collegeId = null) =>
+      client.request(`/api/admin/users/${encodeURIComponent(uid)}/role`, {
+        method: 'POST',
+        body: role === 'superAdmin' || !collegeId ? { role } : { role, collegeId },
+      }),
 
     /** superAdmin, behind licensing_enabled: { colleges } with each one's current licence. */
     listColleges: () => client.request('/api/admin/colleges'),

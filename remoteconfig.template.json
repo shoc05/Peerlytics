@@ -50,6 +50,11 @@
       "valueType": "BOOLEAN",
       "description": "College licences and usage limits."
     },
+    "billing_enabled": {
+      "defaultValue": { "value": "false" },
+      "valueType": "BOOLEAN",
+      "description": "College subscriptions: plans, manual mBoB payments approved by a superAdmin, lecturer seats and read-only when a plan ends."
+    },
     "peer_eval_enabled": {
       "defaultValue": { "value": "false" },
       "valueType": "BOOLEAN",

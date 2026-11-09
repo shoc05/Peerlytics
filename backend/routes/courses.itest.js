@@ -65,7 +65,8 @@ before(async () => {
       getClients: () => ({ auth }),
       mirror,
       joinLimit: createUserRateLimit({ max: 6, windowMs: 60_000 }),
-      isEnabled: async () => coursesOn,
+      // billing_enabled stays off here; src/billing/billing.pg.itest.js covers it.
+      isEnabled: async (name) => (name === 'courses_v2' ? coursesOn : false),
     },
   });
   await new Promise((resolve) => {

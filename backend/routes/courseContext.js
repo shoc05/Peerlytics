@@ -7,6 +7,7 @@ import { getFlag } from '../src/flags/index.js';
 import { createUserRateLimit, requireDb } from './http.js';
 import { ensureUser } from '../services/courses/access.js';
 import { createGroupMirror } from '../services/courses/groupMirror.js';
+import { createCoverageCheck } from '../src/billing/coverage.js';
 
 export const ANY_ROLE = ['student', 'lecturer', 'collegeAdmin', 'superAdmin'];
 
@@ -50,6 +51,9 @@ export function createCourseContext({
     now,
     random,
     joinLimit,
+    isEnabled,
+    /** With billing_enabled on, the course owner needs a covered seat (src/billing/coverage.js). */
+    requireCovered: createCoverageCheck({ isEnabled, now }),
     /** requireAuth, the role check, the courses_v2 flag, then a database and the caller's users row. */
     guard: (...roles) => [requireAuth, requireRole(...roles), requireCourses, requireDb(db), syncUser],
   };

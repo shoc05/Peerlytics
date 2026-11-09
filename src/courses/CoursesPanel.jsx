@@ -10,6 +10,7 @@ import { courseTheme } from './courseTheme';
 import { errorKey, listViewState } from './viewState';
 import { CreateCourseForm, JoinCourseForm } from './CourseForms';
 import CoursePage from './CoursePage';
+import { coverageMessage } from '../admin/billingFormat';
 
 const NOTICE_ID = 'courses-unavailable';
 
@@ -60,7 +61,32 @@ function CourseList({ state, courses, error, isLecturer, t, ui, onOpen, onRetry 
   );
 }
 
-export default function CoursesPanel({ api = null, language = 'en', darkMode = false, isLecturer = false, onOpenWorkspace = () => {}, pushToast = () => {} }) {
+/**
+ * A lecturer's plan status while billing_enabled is on: no seat, grace, read-only or ending soon.
+ * `billingApi` is null for students and when there is no backend; then nothing is shown.
+ */
+export function PlanBanner({ billingApi, ui }) {
+  const [message, setMessage] = useState(null);
+  useEffect(() => {
+    if (!billingApi) return undefined;
+    let cancelled = false;
+    billingApi
+      .getMyBilling()
+      .then((billing) => !cancelled && setMessage(coverageMessage(billing)))
+      .catch(() => {}); // the banner is a hint: the backend still refuses what isn't allowed
+    return () => {
+      cancelled = true;
+    };
+  }, [billingApi]);
+  if (!message) return null;
+  return (
+    <div role="status" data-testid="plan-banner" className={`border border-l-4 rounded-xl px-4 py-3 mb-5 text-sm ${message.tone === 'bad' ? 'border-l-rose-500' : 'border-l-amber-400'} ${ui.notice}`}>
+      {message.text}
+    </div>
+  );
+}
+
+export default function CoursesPanel({ api = null, billingApi = null, language = 'en', darkMode = false, isLecturer = false, onOpenWorkspace = () => {}, pushToast = () => {} }) {
   const t = courseText(language);
   const ui = courseTheme(darkMode);
   const ready = isCourseApiReady(api);
@@ -120,6 +146,7 @@ export default function CoursesPanel({ api = null, language = 'en', darkMode = f
       <p className={`m-0 mb-5 text-[13px] ${ui.sub}`}>{isLecturer ? t('subtitleLecturer') : t('subtitleStudent')}</p>
 
       {!ready && <UnavailableNotice t={t} ui={ui} />}
+      {ready && isLecturer && <PlanBanner billingApi={billingApi} ui={ui} />}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] items-start">
         <section aria-labelledby="my-courses-heading" className={ui.card}>

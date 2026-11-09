@@ -103,7 +103,7 @@ function membershipConflict(err) {
 }
 
 export function createAssignmentRouter(ctx) {
-  const { db, guard, mirror, now, random } = ctx;
+  const { db, guard, mirror, now, random, requireCovered } = ctx;
   const router = express.Router();
 
   const mustBeFuture = (deadline) => {
@@ -129,6 +129,7 @@ export function createAssignmentRouter(ctx) {
       const access = await courseAccess(db.pool, req.user, idParam(uuid, req.params.courseId));
       mustTeach(access);
       mustBeActive(access.course);
+      await requireCovered(db.pool, access.course.owner_id);
       const body = parse(assignmentCreate, req.body);
       mustBeFuture(body.deadline);
       const w = body.weights ?? DEFAULT_WEIGHTS;
@@ -162,6 +163,7 @@ export function createAssignmentRouter(ctx) {
       const access = await assignmentAccess(db.pool, req.user, idParam(uuid, req.params.assignmentId));
       mustTeach(access);
       mustBeActive(access.course);
+      await requireCovered(db.pool, access.course.owner_id);
       const body = parse(assignmentUpdate, req.body);
       if (body.deadline !== undefined) mustBeFuture(body.deadline);
 
@@ -202,6 +204,7 @@ export function createAssignmentRouter(ctx) {
       const access = await assignmentAccess(db.pool, req.user, idParam(uuid, req.params.assignmentId));
       mustTeach(access);
       mustBeActive(access.course);
+      await requireCovered(db.pool, access.course.owner_id);
       await withTransaction(db.pool, async (q) => {
         const { rows: subs } = await q.query(
           `SELECT 1 FROM submissions s JOIN workspaces w ON w.id = s.workspace_id WHERE w.assignment_id = $1 LIMIT 1`,
@@ -255,6 +258,7 @@ export function createAssignmentRouter(ctx) {
       const access = await assignmentAccess(db.pool, req.user, idParam(uuid, req.params.assignmentId));
       mustTeach(access);
       mustBeActive(access.course);
+      await requireCovered(db.pool, access.course.owner_id);
       const body = parse(workspaceCreate, req.body);
       const memberIds = body.memberIds ?? [];
       const id = newWorkspaceId(random);
@@ -322,6 +326,7 @@ export function createAssignmentRouter(ctx) {
     const access = await workspaceAccess(db.pool, req.user, idParam(workspaceIdSchema, req.params.workspaceId));
     mustTeach(access);
     mustBeActive(access.course);
+    await requireCovered(db.pool, access.course.owner_id);
     return access;
   }
 

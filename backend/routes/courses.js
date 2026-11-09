@@ -41,7 +41,7 @@ const ANNOUNCEMENT_SELECT = `
     FROM announcements a JOIN users u ON u.id = a.author_id`;
 
 export function createCourseRouter(ctx) {
-  const { db, guard, joinLimit } = ctx;
+  const { db, guard, joinLimit, requireCovered } = ctx;
   const router = express.Router();
 
   // ── Courses ──
@@ -71,6 +71,7 @@ export function createCourseRouter(ctx) {
     guard('lecturer'),
     handler(async (req, res) => {
       const body = parse(courseCreate, req.body);
+      await requireCovered(db.pool, req.user.uid, { newCourse: true });
       const created = await withTransaction(db.pool, async (q) => {
         // ON CONFLICT DO NOTHING keeps the transaction usable when a random code is already taken.
         for (let i = 0; i < JOIN_CODE_TRIES; i += 1) {

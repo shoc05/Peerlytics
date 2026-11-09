@@ -70,6 +70,8 @@ tags:
     description: Deleting personal data on request (Tshewang, step 4.9).
   - name: Inline comments
     description: Lecturer comments anchored to submitted text (Kezang, step 4.6).
+  - name: Billing
+    description: College plans, manual payments approved by a superAdmin, seats and read-only (steps 6.7 to 6.14, docs/billing.md). Behind billing_enabled, except GET /college and the lecturer routes under /college/lecturers.
   - name: Legacy
     description: Old analysis routes, removed in step 2.4.
 
@@ -1592,7 +1594,7 @@ paths:
       tags: [Auth]
       operationId: listColleges
       summary: Every college with its current licence (superAdmin)
-      description: Needs the `licensing_enabled` flag. The current licence is the one with the latest start date.
+      description: Needs `licensing_enabled` or `billing_enabled`. The current licence is the one with the latest start date.
       x-roles: [superAdmin]
       responses:
         '200':
@@ -1613,7 +1615,7 @@ paths:
       tags: [Auth]
       operationId: createCollege
       summary: Add a college (superAdmin)
-      description: Needs the `licensing_enabled` flag. Writes `college.created` to `audit_log`.
+      description: Needs `licensing_enabled` or `billing_enabled`. Writes `college.created` to `audit_log`.
       x-roles: [superAdmin]
       requestBody:
         required: true
@@ -1680,6 +1682,637 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+  /admin/billing/plans:
+    get:
+      tags: [Billing]
+      operationId: listPlans
+      summary: 'Every plan (superAdmin)'
+      description: 'Shown and hidden plans.'
+      x-roles: [superAdmin]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { plans: { type: array, items: { $ref: '#/components/schemas/Plan' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+    post:
+      tags: [Billing]
+      operationId: createPlan
+      summary: 'Add a plan (superAdmin)'
+      description: 'Writes `plan.created` to `audit_log`.'
+      x-roles: [superAdmin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, priceNu, durationDays, seats]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 100 }
+                priceNu: { type: number, exclusiveMinimum: 0, multipleOf: 0.01 }
+                durationDays: { type: integer, minimum: 1, maximum: 1100 }
+                seats: { type: integer, minimum: 1, maximum: 100000 }
+                maxCourses: { type: [integer, "null"], minimum: 1, maximum: 1000, description: Per seat; null is no limit }
+                monthlyAiAnalyses: { type: [integer, "null"], minimum: 0 }
+                manualOnly: { type: boolean, description: Only a superAdmin can grant it; colleges cannot buy it }
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Plan' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+        '409':
+          description: '`NAME_TAKEN`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /admin/billing/plans/{id}:
+    patch:
+      tags: [Billing]
+      operationId: updatePlan
+      summary: 'Change or hide a plan (superAdmin)'
+      description: 'Plans are hidden with `isActive: false`, never deleted, so requests and subscriptions keep their plan. A price change does not touch amounts already sent. Writes `plan.updated` with before and after.'
+      x-roles: [superAdmin]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 2, maxLength: 100 }
+                priceNu: { type: number, exclusiveMinimum: 0, multipleOf: 0.01 }
+                durationDays: { type: integer, minimum: 1, maximum: 1100 }
+                seats: { type: integer, minimum: 1, maximum: 100000 }
+                maxCourses: { type: [integer, "null"], minimum: 1, maximum: 1000, description: Per seat; null is no limit }
+                monthlyAiAnalyses: { type: [integer, "null"], minimum: 0 }
+                manualOnly: { type: boolean, description: Only a superAdmin can grant it; colleges cannot buy it }
+                isActive: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Plan' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+        '409':
+          description: '`NAME_TAKEN`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /admin/billing/methods:
+    get:
+      tags: [Billing]
+      operationId: listPaymentMethods
+      summary: 'Every payment method (superAdmin)'
+      description: 'Starts empty: the superAdmin adds mBoB, BNB mPay and the others.'
+      x-roles: [superAdmin]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+    post:
+      tags: [Billing]
+      operationId: createPaymentMethod
+      summary: 'Add a payment method (superAdmin)'
+      description: 'Writes `payment_method.created`.'
+      x-roles: [superAdmin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 60 }
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+        '409':
+          description: '`NAME_TAKEN`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /admin/billing/methods/{id}:
+    patch:
+      tags: [Billing]
+      operationId: updatePaymentMethod
+      summary: 'Show or hide a payment method (superAdmin)'
+      description: 'Writes `payment_method.updated`.'
+      x-roles: [superAdmin]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [isActive]
+              properties:
+                isActive: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+  /admin/billing/settings:
+    get:
+      tags: [Billing]
+      operationId: getPaymentSettings
+      summary: 'Where colleges pay, and the grace period (superAdmin)'
+      description: 'Defaults (grace 7 days, no bank details) until saved.'
+      x-roles: [superAdmin]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+    put:
+      tags: [Billing]
+      operationId: savePaymentSettings
+      summary: 'Save payment settings (superAdmin)'
+      description: 'One row. Writes `payment_settings.updated` with before and after.'
+      x-roles: [superAdmin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [graceDays]
+              properties:
+                accountName: { type: [string, "null"], maxLength: 200 }
+                accountNumber: { type: [string, "null"], maxLength: 60 }
+                bank: { type: [string, "null"], maxLength: 200 }
+                qrImagePath: { type: [string, "null"], maxLength: 500 }
+                verificationMessage: { type: [string, "null"], maxLength: 2000 }
+                refundPolicy: { type: [string, "null"], maxLength: 4000 }
+                graceDays: { type: integer, minimum: 0, maximum: 60 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+  /admin/billing/requests:
+    get:
+      tags: [Billing]
+      operationId: listPaymentRequests
+      summary: 'The payment queue (superAdmin)'
+      description: 'Pending first, oldest first. Includes who paid.'
+      x-roles: [superAdmin]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, approved, rejected, cancelled, all], default: pending } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { requests: { type: array, items: { $ref: '#/components/schemas/PaymentRequest' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+  /admin/billing/requests/{id}/approve:
+    post:
+      tags: [Billing]
+      operationId: approvePaymentRequest
+      summary: 'Approve a payment (superAdmin)'
+      description: 'Locks the request and the college in one transaction: a second approval gets 409 `ALREADY_REVIEWED`. Creates a subscription that starts at the current end while active or in grace, otherwise now. Writes `payment.approved`.'
+      x-roles: [superAdmin]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+        '409':
+          description: '`ALREADY_REVIEWED`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /admin/billing/requests/{id}/reject:
+    post:
+      tags: [Billing]
+      operationId: rejectPaymentRequest
+      summary: 'Reject a payment with a reason (superAdmin)'
+      description: 'The college admin sees the reason. The journal number can then be sent again (D8). Writes `payment.rejected`.'
+      x-roles: [superAdmin]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+        '409':
+          description: '`ALREADY_REVIEWED`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /admin/billing/requests/{id}/cancel:
+    post:
+      tags: [Billing]
+      operationId: cancelPaymentRequest
+      summary: 'Cancel a pending payment (superAdmin)'
+      description: 'Writes `payment.cancelled`.'
+      x-roles: [superAdmin]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+        '409':
+          description: '`ALREADY_REVIEWED`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /admin/billing/colleges:
+    get:
+      tags: [Billing]
+      operationId: listBillingColleges
+      summary: 'Every college with its subscription status (superAdmin)'
+      description: 'Status is worked out from the subscriptions: active, grace, read_only, revoked or none.'
+      x-roles: [superAdmin]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { colleges: { type: array, items: { type: object, properties: { id: { type: string, format: uuid }, name: { type: string }, billing: { $ref: '#/components/schemas/CollegeBilling' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+  /admin/billing/colleges/{id}/grants:
+    post:
+      tags: [Billing]
+      operationId: grantSubscription
+      summary: 'Grant a plan without payment, e.g. a pilot (superAdmin)'
+      description: 'Any plan, including manual-only ones. `days` defaults to the plan length. Writes `subscription.granted`.'
+      x-roles: [superAdmin]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [planId, note]
+              properties:
+                planId: { type: string, format: uuid }
+                days: { type: integer, minimum: 1, maximum: 1100 }
+                note: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+  /admin/billing/subscriptions/{id}/extend:
+    post:
+      tags: [Billing]
+      operationId: extendSubscription
+      summary: 'Extend a subscription with a reason (superAdmin)'
+      description: 'From its end, or from now if the college is already read-only. Writes `subscription.extended`.'
+      x-roles: [superAdmin]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [days, reason]
+              properties:
+                days: { type: integer, minimum: 1, maximum: 1100 }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+        '409':
+          description: '`REVOKED`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /admin/billing/subscriptions/{id}/revoke:
+    post:
+      tags: [Billing]
+      operationId: revokeSubscription
+      summary: 'Revoke a subscription with a reason (superAdmin)'
+      description: 'Final; a new grant makes a new row. Writes `subscription.revoked`.'
+      x-roles: [superAdmin]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+        '409':
+          description: '`REVOKED`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /college:
+    get:
+      tags: [Billing]
+      operationId: getMyCollege
+      summary: 'The college admin''s page'
+      description: 'Their own college only: lecturers with seats, and course names and counts (no content). `billing` is null while billing_enabled is off. Not behind billing_enabled.'
+      x-roles: [collegeAdmin]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { college: { type: object }, billingEnabled: { type: boolean }, billing: { oneOf: [{ $ref: '#/components/schemas/CollegeBilling' }, { type: 'null' }] }, lecturers: { type: array, items: { type: object } }, courses: { type: array, items: { type: object } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+        '409':
+          description: '`NO_COLLEGE`: the account has no collegeId claim'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /college/lecturers:
+    post:
+      tags: [Billing]
+      operationId: addCollegeLecturer
+      summary: 'Add a lecturer to the college by email (collegeAdmin)'
+      description: 'They must already be a lecturer. Sets their collegeId claim and revokes their tokens once, so they sign in again. Their courses without a college move to this one. Writes `college.lecturer_added`. Not behind billing_enabled.'
+      x-roles: [collegeAdmin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: '`NOT_A_LECTURER` (no account and not a lecturer give the same answer)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: '`IN_ANOTHER_COLLEGE`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /college/lecturers/{uid}:
+    delete:
+      tags: [Billing]
+      operationId: removeCollegeLecturer
+      summary: 'Remove a lecturer from the college (collegeAdmin)'
+      description: 'Closes their seat and clears their collegeId claim. Writes `college.lecturer_removed`.'
+      x-roles: [collegeAdmin]
+      parameters:
+        - { $ref: '#/components/parameters/Uid' }
+      responses:
+        '204':
+          description: OK
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+  /college/billing:
+    get:
+      tags: [Billing]
+      operationId: getCollegeBilling
+      summary: 'Plans, methods, where to pay and this college’s requests (collegeAdmin)'
+      description: 'Only shown, buyable plans and active methods. Requests never show who reviewed them.'
+      x-roles: [collegeAdmin]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+  /college/payment-requests:
+    post:
+      tags: [Billing]
+      operationId: createPaymentRequest
+      summary: 'Say the college has paid (collegeAdmin)'
+      description: 'A claim only: nothing changes until a superAdmin approves it. The amount must equal the plan price and is stored from the plan. `journalNumber` is stored upper case without spaces; a pending or approved number cannot be used again on the same method (a unique index). At most 3 pending per payer. No lecturer or student route accepts a payment (D1). Writes `payment.requested`.'
+      x-roles: [collegeAdmin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [planId, paymentMethodId, amountNu, journalNumber, paidOn]
+              properties:
+                planId: { type: string, format: uuid }
+                paymentMethodId: { type: string, format: uuid }
+                amountNu: { type: number, exclusiveMinimum: 0, multipleOf: 0.01 }
+                journalNumber: { type: string, description: "4 to 40 letters, digits or hyphens once spaces are removed" }
+                paidOn: { type: string, format: date, description: Not after today in Bhutan }
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+        '409':
+          description: '`JOURNAL_USED`, `TOO_MANY_PENDING`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /college/payment-requests/{id}/cancel:
+    post:
+      tags: [Billing]
+      operationId: cancelMyPaymentRequest
+      summary: 'Cancel one of the college''s pending payments (collegeAdmin)'
+      description: 'Another college’s request is 404.'
+      x-roles: [collegeAdmin]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+        '409':
+          description: '`ALREADY_REVIEWED`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /college/seats/{uid}:
+    post:
+      tags: [Billing]
+      operationId: assignSeat
+      summary: 'Give a lecturer of the college a seat (collegeAdmin)'
+      description: 'Needs an active or grace subscription and a free seat. Locked per college, so two at once cannot pass the limit. Writes `seat.assigned`.'
+      x-roles: [collegeAdmin]
+      parameters:
+        - { $ref: '#/components/parameters/Uid' }
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+        '409':
+          description: '`SUBSCRIPTION_INACTIVE`, `ALREADY_HAS_SEAT`, `SEAT_LIMIT`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      tags: [Billing]
+      operationId: removeSeat
+      summary: 'Remove a lecturer''s seat (collegeAdmin)'
+      description: 'Their courses stay covered for `graceDays`, then become read-only. Writes `seat.removed`.'
+      x-roles: [collegeAdmin]
+      parameters:
+        - { $ref: '#/components/parameters/Uid' }
+      responses:
+        '204':
+          description: OK
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/FeatureDisabledOrNotFound' }
+  /billing/me:
+    get:
+      tags: [Billing]
+      operationId: getMyBilling
+      summary: 'Whether the caller''s work is covered'
+      description: 'For a lecturer while billing_enabled is on, `coverage` says whether they have a seat on an active or grace plan; otherwise it is null. Not behind billing_enabled.'
+      x-roles: [student, lecturer, collegeAdmin, superAdmin]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /admin/users/{uid}/data:
     parameters:
       - $ref: '#/components/parameters/Uid'
@@ -2006,6 +2639,45 @@ components:
             - $ref: '#/components/schemas/AdminLicence'
             - type: 'null'
     # ── Shared ──
+    Plan:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        priceNu: { type: number }
+        durationDays: { type: integer }
+        seats: { type: integer }
+        maxCourses: { type: [integer, 'null'] }
+        monthlyAiAnalyses: { type: [integer, 'null'] }
+        isActive: { type: boolean }
+        manualOnly: { type: boolean }
+    PaymentRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        referenceCode: { type: string, pattern: '^PL-[A-HJKMNP-Z2-9]{6}$' }
+        college: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        plan: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        amountNu: { type: number }
+        method: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        journalNumber: { type: string }
+        paidOn: { type: string, format: date }
+        status: { type: string, enum: [pending, approved, rejected, cancelled] }
+        rejectReason: { type: [string, 'null'] }
+        reviewedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        payer: { type: object, description: superAdmin only }
+    CollegeBilling:
+      type: object
+      properties:
+        status: { type: string, enum: [active, grace, read_only, revoked, none] }
+        plan: { type: [object, 'null'] }
+        paidUntil: { type: [string, 'null'], format: date-time }
+        graceEndsAt: { type: [string, 'null'], format: date-time }
+        seatsUsed: { type: integer }
+        seatLimit: { type: integer }
+        graceDays: { type: integer }
+        subscriptions: { type: array, items: { type: object } }
     Error:
       type: object
       required: [error, code]
@@ -2058,6 +2730,24 @@ components:
         - DATABASE_UNAVAILABLE
         - SLUG_TAKEN
         - RATE_LIMITED
+        # billing (steps 6.7 to 6.14)
+        - NO_SEAT
+        - SUBSCRIPTION_INACTIVE
+        - COURSE_LIMIT
+        - NO_COLLEGE
+        - PLAN_UNAVAILABLE
+        - METHOD_UNAVAILABLE
+        - WRONG_AMOUNT
+        - PAID_ON_IN_FUTURE
+        - TOO_MANY_PENDING
+        - JOURNAL_USED
+        - ALREADY_REVIEWED
+        - REVOKED
+        - NAME_TAKEN
+        - SEAT_LIMIT
+        - ALREADY_HAS_SEAT
+        - NOT_A_LECTURER
+        - IN_ANOTHER_COLLEGE
     Health:
       type: object
       required: [status]

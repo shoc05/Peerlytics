@@ -17,6 +17,14 @@ export const adminSetRoleBody = z
   .refine((b) => b.role !== 'superAdmin' || b.collegeId == null, {
     message: 'A superAdmin has no college.',
     path: ['collegeId'],
+  })
+  .refine((b) => b.role !== 'collegeAdmin' || b.collegeId != null, {
+    message: 'Choose the college this admin looks after.',
+    path: ['collegeId'],
+  })
+  .refine((b) => b.role === 'superAdmin' || b.collegeId == null || /^[0-9a-f-]{36}$/i.test(b.collegeId), {
+    message: 'Choose a college from the list.',
+    path: ['collegeId'],
   });
 
 export const uidParam = z.string().min(1).max(128);
@@ -40,7 +48,8 @@ export function mapLegacyRole(value) {
  */
 export async function applyRole({ auth, db, uid, role, collegeId = null, revoke = false }) {
   await auth.setCustomUserClaims(uid, { role, collegeId });
-  await db.collection('users').doc(uid).set({ role }, { merge: true });
+  // collegeId is mirrored for display only (the admin's Users tab); the backend reads the claim.
+  await db.collection('users').doc(uid).set({ role, collegeId }, { merge: true });
   // Revoking makes verifyIdToken(token, true) reject the old token, so the old role stops
   // working straight away instead of when the token expires.
   if (revoke) await auth.revokeRefreshTokens(uid);
