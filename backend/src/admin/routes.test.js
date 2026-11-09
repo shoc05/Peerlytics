@@ -29,7 +29,7 @@ let baseUrl;
 function listen(options) {
   const app = express();
   app.use(express.json());
-  app.use('/api', createAdminRouter({ getClients: () => clients, isEnabled: async () => enabled, ...options }));
+  app.use('/api', createAdminRouter({ getClients: () => clients, isEnabled: async (name) => (typeof enabled === 'object' ? Boolean(enabled[name]) : enabled), ...options }));
   return new Promise((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s));
   });
@@ -90,13 +90,20 @@ describe('who can use the admin routes', () => {
       assert.deepEqual(calls, []);
     });
 
-    test(`${method} ${path} is off while licensing_enabled is off`, async () => {
+    test(`${method} ${path} is off while licensing_enabled and billing_enabled are off`, async () => {
       enabled = false;
       const res = await call(path, { method, body: method === 'POST' ? {} : undefined });
       assert.deepEqual([res.status, res.body.code], [404, 'FEATURE_DISABLED']);
       assert.deepEqual(calls, []);
     });
   }
+
+  test('billing_enabled alone turns colleges on, but not licences', async () => {
+    enabled = { billing_enabled: true };
+    assert.equal((await call('/admin/colleges')).status, 200);
+    const licence = await call(`/admin/colleges/${COLLEGE_ID}/licences`, { method: 'POST', body: {} });
+    assert.deepEqual([licence.status, licence.body.code], [404, 'FEATURE_DISABLED']);
+  });
 
   test('a superAdmin gets 503 when there is no database', async () => {
     const s = await listen({ db: { pool: null } });

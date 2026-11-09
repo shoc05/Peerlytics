@@ -123,6 +123,9 @@ test('API errors map to the contract codes', () => {
   assert.equal(errorKey({ status: 401, code: 'TOKEN_EXPIRED' }), 'errorSignedOut');
   assert.equal(errorKey({ status: 403, code: 'NO_ROLE' }), 'errorNoRole');
   assert.equal(errorKey({ status: 403, code: 'FORBIDDEN' }), 'errorForbidden');
+  assert.equal(errorKey({ status: 403, code: 'NO_SEAT' }), 'errorNoSeat');
+  assert.equal(errorKey({ status: 403, code: 'SUBSCRIPTION_INACTIVE' }), 'errorReadOnly');
+  assert.equal(errorKey({ status: 403, code: 'COURSE_LIMIT' }), 'errorCourseLimit');
   assert.equal(errorKey({ status: 404 }), 'errorNotFound');
   assert.equal(errorKey({ status: 501 }), 'errorUnavailable');
   assert.equal(errorKey({ status: 429 }), 'errorRateLimited');

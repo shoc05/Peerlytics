@@ -3,6 +3,7 @@ import { signOut } from 'firebase/auth';
 import { logger } from '../utils/logger';
 import { getFirebaseAuth } from '../firebase/config';
 import { createApiClient } from './client';
+import { createBillingApi } from './billingEndpoints';
 import { createCourseApi } from './courseEndpoints';
 import { createApi } from './endpoints';
 
@@ -24,3 +25,6 @@ export const { addLicence, chooseRole, createCollege, getMe, grantExtension, lis
 
 // Course site: the methods in COURSE_API_METHODS (src/courses/courseApi.js) over the real routes.
 export const courseApi = createCourseApi(client);
+
+// Plans, payments, seats and the college admin's page (docs/billing.md).
+export const billingApi = createBillingApi(client);

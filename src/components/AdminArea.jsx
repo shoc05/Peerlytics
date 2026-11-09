@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { addLicence, createCollege, listColleges, setUserRole } from '../api';
+import { addLicence, billingApi, createCollege, listColleges, setUserRole } from '../api';
+import { BillingCollegesTab, PaymentSettingsTab, PaymentsTab, PlansTab } from '../admin/SuperAdminBilling';
 import { useAuth } from '../context/AuthContext';
 import { getAllGroups, getAllUsers } from '../firebase/firestoreService';
 import { useFlag } from '../flags/FlagsProvider';
@@ -16,11 +17,12 @@ import {
 import { ROLES } from '../utils/authRole';
 import AdminPanel from './AdminPanel';
 
-const GREEN = '#1D9E75';
+// Dark enough for white button text to pass WCAG AA contrast (about 5.3:1).
+const GREEN = '#0F7A5A';
 const STATUS_LABELS = {
   none: { text: 'No licence', color: '#9a9a9a' },
   upcoming: { text: 'Not started', color: '#4facfe' },
-  active: { text: 'Active', color: GREEN },
+  active: { text: 'Active', color: '#1D9E75' },
   expired: { text: 'Expired', color: '#e74c3c' },
 };
 const EMPTY_LICENCE = { plan: 'trial', seats: '', monthlyAiBudgetUsd: '0', startsOn: '', endsOn: '' };
@@ -112,36 +114,124 @@ function useLoad(load) {
   return { ...state, setData };
 }
 
-function UsersTab({ colors }) {
-  const { user: me } = useAuth();
-  const { loading, error, data: users, setData } = useLoad(getAllUsers);
-  const [search, setSearch] = useState('');
-  const [busyId, setBusyId] = useState(null);
-  const [actionError, setActionError] = useState('');
+// Roles that belong to a college. A collegeAdmin must have one; for a lecturer it is optional
+// (their college admin can also add them).
+const COLLEGE_ROLES = ['collegeAdmin', 'lecturer'];
 
-  const visible = useMemo(() => filterUsers(users || [], search), [users, search]);
+function UserRow({ u, isMe, colleges, collegesOn, colors, onSaved }) {
+  const uid = u.uid || u.id;
+  const currentRole = ROLES.includes(u.role) ? u.role : '';
+  const currentCollege = u.collegeId || '';
+  const [role, setRole] = useState(currentRole);
+  const [collegeId, setCollegeId] = useState(currentCollege);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const name = u.name || u.email || uid;
+  const needsCollege = role === 'collegeAdmin';
+  const canHaveCollege = COLLEGE_ROLES.includes(role);
+  const changed = role !== currentRole || (canHaveCollege && collegeId !== currentCollege);
+  const collegeName = colleges.find((c) => c.id === currentCollege)?.name;
 
-  async function changeRole(target, role) {
-    const uid = target.uid || target.id;
-    if (role === target.role) return;
-    const name = target.name || target.email || uid;
-    if (!window.confirm(`Change ${name} to ${role}? They will be signed out and must sign in again.`)) return;
-    setBusyId(uid);
-    setActionError('');
+  async function save() {
+    if (needsCollege && !collegeId) {
+      setError('Choose the college this admin looks after.');
+      return;
+    }
+    const where = canHaveCollege && collegeId ? ` at ${colleges.find((c) => c.id === collegeId)?.name || 'that college'}` : '';
+    if (!window.confirm(`Change ${name} to ${role}${where}? They will be signed out and must sign in again.`)) return;
+    setBusy(true);
+    setError('');
     try {
-      await setUserRole(uid, role);
-      setData((list) => list.map((u) => ((u.uid || u.id) === uid ? { ...u, role } : u)));
+      const saved = await setUserRole(uid, role, canHaveCollege ? collegeId || null : null);
+      onSaved(uid, { role: saved.role, collegeId: saved.collegeId });
     } catch (err) {
-      setActionError(err.message || 'Could not change the role.');
+      setError(err.message || 'Could not change the role.');
     } finally {
-      setBusyId(null);
+      setBusy(false);
     }
   }
 
   return (
+    <tr style={{ borderTop: `1px solid ${colors.border}` }}>
+      <td style={{ padding: '10px 18px' }}>{u.name || '—'}{isMe && <span style={{ color: colors.sub }}> (you)</span>}</td>
+      <td style={{ padding: '10px 12px', color: colors.sub }}>{u.email || '—'}</td>
+      <td style={{ padding: '10px 12px' }}>
+        <select
+          aria-label={`Role for ${name}`}
+          value={role}
+          disabled={isMe || busy}
+          onChange={(e) => {
+            setRole(e.target.value);
+            setError('');
+          }}
+          style={{ ...inputStyle(colors), width: 'auto' }}
+        >
+          {!currentRole && <option value="" disabled>No role</option>}
+          {ROLES.map((r) => (
+            <option key={r} value={r} disabled={r === 'collegeAdmin' && !collegesOn}>{r}</option>
+          ))}
+        </select>
+      </td>
+      <td style={{ padding: '10px 12px' }}>
+        {canHaveCollege && collegesOn ? (
+          <select
+            aria-label={`College for ${name}`}
+            value={collegeId}
+            disabled={isMe || busy}
+            onChange={(e) => setCollegeId(e.target.value)}
+            style={{ ...inputStyle(colors), width: 'auto', maxWidth: 220 }}
+          >
+            <option value="">{needsCollege ? 'Choose a college…' : 'No college'}</option>
+            {colleges.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        ) : (
+          <span style={{ color: colors.sub }}>{collegeName || '—'}</span>
+        )}
+      </td>
+      <td style={{ padding: '10px 18px', whiteSpace: 'nowrap' }}>
+        {changed && !isMe && (
+          <>
+            <button type="button" onClick={save} disabled={busy} style={primaryButton(busy)}>{busy ? 'Saving…' : 'Save'}</button>
+            <button
+              type="button"
+              onClick={() => {
+                setRole(currentRole);
+                setCollegeId(currentCollege);
+                setError('');
+              }}
+              disabled={busy}
+              style={{ marginLeft: 6, padding: '9px 12px', borderRadius: 8, border: `1px solid ${colors.border}`, background: 'transparent', color: colors.text, fontSize: 13, cursor: 'pointer' }}
+            >
+              Undo
+            </button>
+          </>
+        )}
+        {error && <div role="alert" style={{ color: '#e74c3c', fontSize: 12, marginTop: 4 }}>{error}</div>}
+      </td>
+    </tr>
+  );
+}
+
+const NO_COLLEGES = () => Promise.resolve([]);
+const loadCollegeList = () => listColleges().then((r) => r.colleges);
+
+function UsersTab({ colors, collegesOn }) {
+  const { user: me } = useAuth();
+  const { loading, error, data: users, setData } = useLoad(getAllUsers);
+  const { data: colleges } = useLoad(collegesOn ? loadCollegeList : NO_COLLEGES);
+  const [search, setSearch] = useState('');
+
+  const visible = useMemo(() => filterUsers(users || [], search), [users, search]);
+  const onSaved = useCallback((uid, changes) => setData((list) => list.map((u) => ((u.uid || u.id) === uid ? { ...u, ...changes } : u))), [setData]);
+
+  const collegeNote = collegesOn ? '' : ' (turn on billing_enabled and add a college first)';
+  return (
     <>
-      <Heading title="Users and roles" subtitle="Everyone with an account. Changing a role signs that person out. You cannot change your own role." colors={colors} />
-      {actionError && <ErrorBox>{actionError}</ErrorBox>}
+      <Heading
+        title="Users and roles"
+        subtitle={`Everyone with an account. People choose student or lecturer when they sign up; other roles are given here. A collegeAdmin needs a college${collegeNote}. Changing a role signs that person out. You cannot change your own role.`}
+        colors={colors}
+      />
       {loading ? (
         <Message colors={colors}>Loading users…</Message>
       ) : error ? (
@@ -165,30 +255,24 @@ function UsersTab({ colors }) {
                   <tr style={{ color: colors.sub, textAlign: 'left' }}>
                     <th style={{ padding: '10px 18px', fontWeight: 600 }}>Name</th>
                     <th style={{ padding: '10px 12px', fontWeight: 600 }}>Email</th>
-                    <th style={{ padding: '10px 18px', fontWeight: 600 }}>Role</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 600 }}>Role</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 600 }}>College</th>
+                    <th style={{ padding: '10px 18px', fontWeight: 600 }}><span className="sr-only">Save</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   {visible.map((u) => {
                     const uid = u.uid || u.id;
-                    const isMe = uid === me?.uid;
                     return (
-                      <tr key={uid} style={{ borderTop: `1px solid ${colors.border}` }}>
-                        <td style={{ padding: '10px 18px' }}>{u.name || '—'}{isMe && <span style={{ color: colors.sub }}> (you)</span>}</td>
-                        <td style={{ padding: '10px 12px', color: colors.sub }}>{u.email || '—'}</td>
-                        <td style={{ padding: '10px 18px' }}>
-                          <select
-                            aria-label={`Role for ${u.name || u.email || uid}`}
-                            value={ROLES.includes(u.role) ? u.role : ''}
-                            disabled={isMe || busyId === uid}
-                            onChange={(e) => changeRole(u, e.target.value)}
-                            style={{ ...inputStyle(colors), width: 'auto' }}
-                          >
-                            {!ROLES.includes(u.role) && <option value="" disabled>No role</option>}
-                            {ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
-                          </select>
-                        </td>
-                      </tr>
+                      <UserRow
+                        key={`${uid}-${u.role}-${u.collegeId || ''}`}
+                        u={u}
+                        isMe={uid === me?.uid}
+                        colleges={colleges || []}
+                        collegesOn={collegesOn}
+                        colors={colors}
+                        onSaved={onSaved}
+                      />
                     );
                   })}
                 </tbody>
@@ -421,18 +505,33 @@ function LicencesTab({ colors }) {
   );
 }
 
-// The superAdmin's page: the grading audit plus users, workspaces and, behind licensing_enabled,
-// colleges and licences.
+// The superAdmin's page: the grading audit plus users and workspaces; behind billing_enabled,
+// payments, colleges with subscriptions, plans and payment settings (docs/billing.md); behind
+// licensing_enabled only, the older colleges and licences tab.
 export default function AdminArea({ darkMode }) {
   const licensingOn = useFlag('licensing_enabled');
-  const [tab, setTab] = useState('grading');
+  const billingOn = useFlag('billing_enabled');
+  const [tab, setTab] = useState(billingOn ? 'payments' : 'grading');
   const colors = palette(darkMode);
+  const CollegeForm = useMemo(
+    () =>
+      function CollegeForm({ onCreated }) {
+        return <NewCollegeForm colors={palette(darkMode)} onCreated={onCreated} />;
+      },
+    [darkMode]
+  );
 
+  const billingTabs = [
+    { id: 'colleges', label: 'Colleges and subscriptions' },
+    { id: 'plans', label: 'Plans' },
+    { id: 'paysettings', label: 'Payment settings' },
+  ];
   const tabs = [
+    ...(billingOn ? [{ id: 'payments', label: 'Payments' }] : []),
     { id: 'grading', label: 'Grading oversight' },
     { id: 'users', label: 'Users and roles' },
     { id: 'workspaces', label: 'Workspaces' },
-    ...(licensingOn ? [{ id: 'licences', label: 'Colleges and licences' }] : []),
+    ...(billingOn ? billingTabs : licensingOn ? [{ id: 'licences', label: 'Colleges and licences' }] : []),
   ];
 
   return (
@@ -460,10 +559,14 @@ export default function AdminArea({ darkMode }) {
           </button>
         ))}
       </div>
+      {tab === 'payments' && billingOn && <PaymentsTab api={billingApi} darkMode={darkMode} />}
       {tab === 'grading' && <AdminPanel darkMode={darkMode} />}
-      {tab === 'users' && <UsersTab colors={colors} />}
+      {tab === 'users' && <UsersTab colors={colors} collegesOn={billingOn || licensingOn} />}
       {tab === 'workspaces' && <WorkspacesTab colors={colors} />}
-      {tab === 'licences' && licensingOn && <LicencesTab colors={colors} />}
+      {tab === 'colleges' && billingOn && <BillingCollegesTab api={billingApi} darkMode={darkMode} NewCollegeForm={CollegeForm} />}
+      {tab === 'plans' && billingOn && <PlansTab api={billingApi} darkMode={darkMode} />}
+      {tab === 'paysettings' && billingOn && <PaymentSettingsTab api={billingApi} darkMode={darkMode} />}
+      {tab === 'licences' && licensingOn && !billingOn && <LicencesTab colors={colors} />}
     </div>
   );
 }

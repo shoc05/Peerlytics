@@ -15,6 +15,7 @@ const StoragePanel = lazy(() => import('./StoragePanel'));
 const CalendarPanel = lazy(() => import('./CalendarPanel'));
 const ReportsPanel = lazy(() => import('./ReportsPanel'));
 const AdminArea = lazy(() => import('./AdminArea'));
+const CollegeAdminConsole = lazy(() => import('../admin/CollegeAdminConsole'));
 const CoursesPanel = lazy(() => import('../courses/CoursesPanel'));
 import { enrichMembers } from '../utils/scoring';
 import { gradeSubmission, writingFromReport } from '../utils/behaviorGrade';
@@ -49,7 +50,7 @@ import {
 } from '../firebase/firestoreService';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { courseApi } from '../api';
+import { billingApi, courseApi } from '../api';
 import { useFlag } from '../flags/FlagsProvider';
 import { isCourseApiReady } from '../courses/courseApi';
 import { logOut } from '../firebase/authService';
@@ -149,7 +150,7 @@ function formatSecondsExact(totalSeconds) {
 
 const PeerlyticsDashboard = () => {
   const navigate = useNavigate();
-  const { user: currentUser, isLecturer, isAdmin, refreshProfile } = useAuth();
+  const { user: currentUser, isLecturer, isAdmin, isCollegeAdmin, refreshProfile } = useAuth();
   const coursesV2 = useFlag('courses_v2');
   const [darkMode, setDarkMode] = useState(() => {
     try {
@@ -830,8 +831,9 @@ const PeerlyticsDashboard = () => {
 
   if (!currentUser) return null;
 
-  // Admins get a dedicated oversight page (not the student/lecturer workspace layout).
-  if (isAdmin) {
+  // Admins get their own page (not the student/lecturer workspace layout): a superAdmin the
+  // oversight and billing area, a collegeAdmin their college's console.
+  if (isAdmin || isCollegeAdmin) {
     return (
       <div style={{
         background: pageBackground(darkMode), color: darkMode ? '#ededed' : '#1a2e24',
@@ -840,7 +842,7 @@ const PeerlyticsDashboard = () => {
         <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 28px', background: darkMode ? 'rgba(13, 13, 13, 0.92)' : 'rgba(255, 255, 255, 0.98)', backdropFilter: 'blur(10px)', borderBottom: `1px solid ${darkMode ? '#2e2e2e' : '#dce5e0'}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontWeight: 800, fontSize: 18 }}>
             <Logo variant="banner" darkMode={darkMode} height={44} width="auto" />
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: '#6c5ce7', borderRadius: 4, padding: '2px 8px' }}>ADMIN</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: isAdmin ? '#6c5ce7' : '#0f7a5a', borderRadius: 4, padding: '2px 8px' }}>{isAdmin ? 'ADMIN' : 'COLLEGE ADMIN'}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 13, color: darkMode ? '#9a9a9a' : '#666' }}>{currentUser.name || currentUser.email}</span>
@@ -854,7 +856,7 @@ const PeerlyticsDashboard = () => {
         </header>
         <div style={{ padding: '30px', maxWidth: 1100, margin: '0 auto' }}>
           <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: darkMode ? '#9a9a9a' : '#666' }}>Loading admin…</div>}>
-            <AdminArea darkMode={darkMode} />
+            {isAdmin ? <AdminArea darkMode={darkMode} /> : <CollegeAdminConsole api={billingApi} darkMode={darkMode} />}
           </Suspense>
         </div>
       </div>
@@ -2415,6 +2417,7 @@ const PeerlyticsDashboard = () => {
               language={language}
               darkMode={darkMode}
               isLecturer={isLecturer}
+              billingApi={isLecturer ? billingApi : null}
               pushToast={pushToast}
             />
           )}

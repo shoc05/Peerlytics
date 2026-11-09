@@ -16,6 +16,7 @@ import { createLegacyProvider } from './services/analysis/legacyProvider.js';
 import { createOpenAIProvider } from './services/analysis/openaiProvider.js';
 import { createWorkspaceStore } from './services/submissions/workspaceStore.js';
 import { createAdminRouter } from './src/admin/routes.js';
+import { createBillingRouter } from './src/billing/routes.js';
 import { sendError } from './src/auth/errors.js';
 import { getAdmin } from './src/auth/firebaseAdmin.js';
 import { createRequireAuth, requireRole } from './src/auth/middleware.js';
@@ -46,11 +47,12 @@ function rateLimit({ windowMs = 60_000, max = 20 } = {}) {
  *           db: ReturnType<import('./db/pool.js').createDb>,
  *           metrics?: ReturnType<typeof createMetrics>,
  *           getClients?: typeof getAdmin,
- *           courseDeps?: object, submissionDeps?: object }} deps
+ *           courseDeps?: object, submissionDeps?: object, billingDeps?: object }} deps
  *   courseDeps: overrides for createCourseContext; submissionDeps: { analysis, store, ... } for
- *   createSubmissionRouter. Tests pass fakes for Firebase, Firestore and the AI providers.
+ *   createSubmissionRouter; billingDeps: overrides for createBillingRouter. Tests pass fakes for
+ *   Firebase, Firestore and the AI providers.
  */
-export function createApp({ config, db, metrics = createMetrics(), getClients = getAdmin, courseDeps = {}, submissionDeps = {} }) {
+export function createApp({ config, db, metrics = createMetrics(), getClients = getAdmin, courseDeps = {}, submissionDeps = {}, billingDeps = {} }) {
   const app = express();
 
   app.set('trust proxy', config.trustProxyHops); // correct req.ip behind proxies (for rate limiting)
@@ -79,6 +81,7 @@ export function createApp({ config, db, metrics = createMetrics(), getClients = 
   app.use('/api', createAuthRouter({ getClients }));
   app.use('/api', createExtensionRouter({ getClients }));
   app.use('/api', createAdminRouter({ db, getClients }));
+  app.use('/api', createBillingRouter({ db, getClients, ...billingDeps }));
   const courses = createCourseContext({ db, getClients, ...courseDeps });
   app.use('/api', createCourseRouter(courses));
   app.use('/api', createAssignmentRouter(courses));

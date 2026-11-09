@@ -21,6 +21,25 @@ const MESSAGES = {
   RATE_LIMITED: 'Too many requests. Please wait a moment and try again.',
   DB_UNAVAILABLE: 'The database is not available right now. Please try again later.',
   FIRESTORE_UNAVAILABLE: 'Workspace storage is not configured on the server.',
+  // Billing (docs/billing.md)
+  NO_SEAT: 'You do not have a seat on a college subscription. Ask your college admin for one.',
+  SUBSCRIPTION_INACTIVE: "Your college's subscription has ended, so this is read-only until it is renewed.",
+  COURSE_LIMIT: "You have reached your plan's limit of courses. Archive one or ask your college admin.",
+  NO_COLLEGE: 'Your account is not linked to a college. Ask the Peerlytics administrator.',
+  PLAN_UNAVAILABLE: 'That plan is not available.',
+  METHOD_UNAVAILABLE: 'That payment method is not available.',
+  WRONG_AMOUNT: "The amount does not match the plan's price.",
+  PAID_ON_IN_FUTURE: 'The payment date cannot be in the future.',
+  TOO_MANY_PENDING: 'You already have 3 payments waiting for review. Wait for them, or cancel one.',
+  JOURNAL_USED: 'That journal number has already been used for this payment method.',
+  ALREADY_REVIEWED: 'This payment has already been reviewed or cancelled.',
+  REVOKED: 'This subscription has been revoked.',
+  NAME_TAKEN: 'That name is already used.',
+  SEAT_LIMIT: 'Every seat on the plan is in use. Remove a seat or buy a bigger plan.',
+  ALREADY_HAS_SEAT: 'This lecturer already has a seat.',
+  NOT_A_LECTURER: 'There is no lecturer account with that email. They must sign up as a lecturer first.',
+  IN_ANOTHER_COLLEGE: 'That lecturer belongs to another college.',
+  ALREADY_IN_COLLEGE: 'That lecturer is already in your college.',
 };
 
 /** An error a handler can throw to answer with a specific status and code. */

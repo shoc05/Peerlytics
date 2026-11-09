@@ -8,6 +8,9 @@ export function errorKey(err) {
   if (status === 401) return 'errorSignedOut';
   if (code === 'NO_ROLE') return 'errorNoRole';
   if (code === 'ALREADY_ENROLLED') return 'errorAlreadyEnrolled';
+  if (code === 'NO_SEAT') return 'errorNoSeat';
+  if (code === 'SUBSCRIPTION_INACTIVE') return 'errorReadOnly';
+  if (code === 'COURSE_LIMIT') return 'errorCourseLimit';
   if (status === 403) return 'errorForbidden';
   if (status === 404) return 'errorNotFound';
   if (status === 501) return 'errorUnavailable';

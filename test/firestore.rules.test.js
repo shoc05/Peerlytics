@@ -192,6 +192,15 @@ test('denies changing or removing your own role', async () => {
   await assertFails(setDoc(doc(db, 'users/student-2'), { uid: 'student-2', name: 'S' }));
 });
 
+test('denies setting your own college, which only the backend writes', async () => {
+  await seedUser('lecturer-9', { uid: 'lecturer-9', name: 'L', role: 'lecturer' });
+  const db = testEnvironment.authenticatedContext('lecturer-9').firestore();
+  await assertFails(updateDoc(doc(db, 'users/lecturer-9'), { collegeId: '0b5c1f9e-2a71-4c8e-9d3b-6e0f4a2c7b11' }));
+  const fresh = testEnvironment.authenticatedContext('newcomer-9').firestore();
+  await assertFails(setDoc(doc(fresh, 'users/newcomer-9'), { uid: 'newcomer-9', name: 'N', collegeId: 'x' }));
+  await assertSucceeds(setDoc(doc(fresh, 'users/newcomer-9'), { uid: 'newcomer-9', name: 'N' }));
+});
+
 test('allows updating your own profile fields other than role', async () => {
   await seedUser('student-3', { uid: 'student-3', name: 'S', role: 'student', classSection: '' });
   const db = testEnvironment.authenticatedContext('student-3').firestore();

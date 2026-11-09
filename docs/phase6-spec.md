@@ -201,6 +201,21 @@ Each step is one PR into `develop`, on `feature/6.<n>-<name>`. Owners are sugges
 | 6.15 | Tshewang | `backend/src/billing`, `src/` | Stubbed email; no emails in logs | 6.15 Billing notifications and expiry reminders |
 | 6.16 | Sangay | `e2e/`, `docs/`, `.env.example` | All four Playwright journeys, axe on every screen, full CI | 6.16 End-to-end journeys, docs/billing.md and final checks |
 
+### Progress
+
+| Step | State | Where |
+|---|---|---|
+| 6.1–6.4 | Done | PRs #82, #86, #87, #88 |
+| 6.7 | Done | `backend/db/migrations/1792368000003_billing.js`, `docs/db-schema.md`, `backend/openapi.yaml`, `billing_enabled` |
+| 6.8 | Done | `backend/src/billing/` (requests, approve, reject, cancel, grants, extend, revoke) |
+| 6.9 | Backend done; the Firestore `entitlements` document is not | `backend/src/billing/coverage.js`. Course, project, group, member, submit and re-analysis routes check the owner's seat. Editing inside a workspace is still allowed by the rules while read-only |
+| 6.12 | Partly: the lecturer banner and error messages | `src/courses/CoursesPanel.jsx` (`PlanBanner`), `src/admin/billingFormat.js` |
+| 6.13 | Done | `src/admin/SuperAdminBilling.jsx`, `src/components/AdminArea.jsx` |
+| 6.14 | Done | `src/admin/CollegeAdminConsole.jsx`, `/api/college/*` |
+| 6.5, 6.6, 6.10, 6.11, 6.15, 6.16 | Not started | |
+
+One change from section 3.2: seats belong to the college (`seat_assignments.college_id`), not to one subscription row, so renewals keep them. See `docs/billing.md`.
+
 ## 6. How we prove it works
 
 Required before a step counts as done, as in the brief.

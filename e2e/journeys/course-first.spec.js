@@ -2,7 +2,7 @@
 // reaches only their own group's workspace. With courses_v2 on, Courses is home and there is no
 // way to make a standalone workspace.
 import { expect, test } from '@playwright/test';
-import { createAccount, expectAccessible, signIn } from './helpers.js';
+import { createAccount, createCoveredLecturer, expectAccessible, signIn } from './helpers.js';
 
 const THEMES = ['light', 'dark'];
 
@@ -26,7 +26,8 @@ async function joinCourse(browser, student, code, title) {
 }
 
 test('lecturer creates a course and project, and each student reaches only their own group', async ({ browser }) => {
-  const lecturer = await createAccount('lecturer', 'Pema Lecturer');
+  // billing_enabled is on in the journeys, so the lecturer needs a seat (billing.spec.js covers how).
+  const lecturer = await createCoveredLecturer('Pema Lecturer');
   const tashi = await createAccount('student', 'Tashi Student');
   const dorji = await createAccount('student', 'Dorji Student');
   const suffix = Date.now().toString(36).slice(-4).toUpperCase();
@@ -121,7 +122,7 @@ test('lecturer creates a course and project, and each student reaches only their
 
 for (const theme of THEMES) {
   test(`the new course screens pass axe, and fit a phone, in the ${theme} theme`, async ({ browser }) => {
-    const lecturer = await createAccount('lecturer', 'Axe Lecturer');
+    const lecturer = await createCoveredLecturer('Axe Lecturer');
     const student = await createAccount('student', 'Axe Student');
     const suffix = Date.now().toString(36).slice(-4).toUpperCase();
     const title = `Axe Course ${suffix}`;

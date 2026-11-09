@@ -111,7 +111,7 @@ before(async () => {
     config: loadConfig({}),
     db,
     metrics: createMetrics({ registry: new client.Registry() }),
-    courseDeps: { getClients: () => ({ auth: fakeAuth({ tokens }) }), mirror, isEnabled: async () => true },
+    courseDeps: { getClients: () => ({ auth: fakeAuth({ tokens }) }), mirror, isEnabled: async (name) => name === 'courses_v2' },
     submissionDeps: { analysis, store },
   });
   await new Promise((resolve) => {

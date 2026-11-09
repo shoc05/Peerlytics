@@ -123,15 +123,16 @@
         allow read: if signedIn();
         // `role` mirrors the custom claim and only the backend (Admin SDK) writes it, so a
         // client can neither create a profile with a role nor change or remove it later.
+        // collegeId is the same: a server-written copy of the claim, shown in the admin's Users tab.
         allow create: if signedIn() && request.auth.uid == userId &&
-          !('role' in request.resource.data);
-        // Own updates may change any field except role. Any signed-in user may set only the groupId field,
+          !('role' in request.resource.data) && !('collegeId' in request.resource.data);
+        // Own updates may change any field except role and collegeId. Any signed-in user may set only the groupId field,
         // and only to a group they are themselves a member/lecturer of — this is the
         // invite flow (addGroupMember sets the invited user's groupId pointer; the inviter
         // is always an existing member of that group).
         allow update: if signedIn() && (
           (request.auth.uid == userId &&
-            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])) ||
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'collegeId'])) ||
           (
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['groupId']) &&
             isMemberOfGroup(request.resource.data.groupId)

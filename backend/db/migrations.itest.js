@@ -17,11 +17,13 @@ const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'
 const migrationsTable = 'pgmigrations';
 
 // Every table in docs/db-schema.md.
-const TABLES = [
+const BILLING_TABLES = ['payment_methods', 'payment_requests', 'payment_settings', 'plans', 'seat_assignments', 'subscriptions'];
+const BASE_TABLES = [
   'analysis_results', 'announcements', 'assignments', 'audit_log', 'college_domains', 'colleges',
   'courses', 'enrolments', 'grades', 'group_extensions', 'licences', 'overrides', 'peer_evaluations',
   'submissions', 'tasks', 'usage', 'users', 'workspace_members', 'workspaces',
 ];
+const TABLES = [...BASE_TABLES, ...BILLING_TABLES].sort();
 
 const dbName = `peerlytics_itest_${randomBytes(4).toString('hex')}`;
 let dbUrl;
@@ -107,11 +109,13 @@ describe('migrations', () => {
 
     assert.match(await reasonCheck(), /openai_not_configured/);
     await migrate('down', 1);
+    assert.deepEqual(await tables(), BASE_TABLES, 'the billing migration is undone first');
+    await migrate('down', 1);
     assert.doesNotMatch(await reasonCheck(), /openai_not_configured/, 'the fallback-reasons migration is undone first');
     assert.equal(await trigger(), 1);
     await migrate('down', 1);
     assert.equal(await trigger(), 0, 'then the trigger migration');
-    assert.deepEqual(await tables(), TABLES, 'the tables are still there');
+    assert.deepEqual(await tables(), BASE_TABLES, 'the tables are still there');
     await migrate('up');
     assert.match(await reasonCheck(), /openai_not_configured/);
   });

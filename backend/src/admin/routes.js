@@ -1,4 +1,5 @@
-// Colleges and licences for a superAdmin, behind the licensing_enabled flag. A licence is a record
+// Colleges and licences for a superAdmin. Colleges are behind licensing_enabled or billing_enabled,
+// licences behind licensing_enabled only. A licence is a record
 // for now: nothing here limits seats or AI spending, and there are no payments.
 import express from 'express';
 import { z } from 'zod';
@@ -45,15 +46,19 @@ export function createAdminRouter({ db, getClients = getAdmin, isEnabled = getFl
   const requireAuth = createRequireAuth(() => getClients()?.auth ?? null);
   const admin = store ?? (db?.pool ? createAdminStore(db.pool) : null);
 
-  const gate = [
+  // `flags`: any one of them turns the route on. Colleges are needed by licences and by billing.
+  const gateFor = (...flags) => [
     requireAuth,
     requireRole('superAdmin'),
     wrap(async (_req, res, next) => {
-      if (!(await isEnabled('licensing_enabled'))) return sendError(res, 404, 'FEATURE_DISABLED');
+      const on = await Promise.all(flags.map((flag) => isEnabled(flag)));
+      if (!on.some(Boolean)) return sendError(res, 404, 'FEATURE_DISABLED');
       if (!admin) return sendError(res, 503, 'DATABASE_UNAVAILABLE');
       return next();
     }),
   ];
+  const gate = gateFor('licensing_enabled', 'billing_enabled');
+  const licenceGate = gateFor('licensing_enabled');
 
   router.get(
     '/admin/colleges',
@@ -80,7 +85,7 @@ export function createAdminRouter({ db, getClients = getAdmin, isEnabled = getFl
 
   router.post(
     '/admin/colleges/:collegeId/licences',
-    gate,
+    licenceGate,
     wrap(async (req, res) => {
       const collegeId = collegeIdParam.safeParse(req.params.collegeId);
       if (!collegeId.success) return sendError(res, 404, 'NOT_FOUND');

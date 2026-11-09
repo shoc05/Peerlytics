@@ -79,6 +79,7 @@ try {
     RUN_JOBS: 'true',
     GCLOUD_PROJECT: 'demo-peerlytics',
     FLAG_COURSES_V2: 'true',
+    FLAG_BILLING_ENABLED: 'true',
     // No analysis or email leaves the machine during the journeys.
     HF_API_KEY: '',
     VWT_API_KEY: '',
@@ -96,6 +97,7 @@ try {
     VITE_API_URL: API_URL,
     VITE_COLLAB_URL: '',
     VITE_FLAG_COURSES_V2: 'true',
+    VITE_FLAG_BILLING_ENABLED: 'true',
     VITE_AUTH_EMULATOR_URL: `http://${authHost}:${authPort}`,
     VITE_FIRESTORE_EMULATOR_PORT: firestorePort,
   });
@@ -106,6 +108,7 @@ try {
     JOURNEY_URL: WEB_URL,
     JOURNEY_API_URL: API_URL,
     JOURNEY_AUTH_URL: `http://${authHost}:${authPort}`,
+    JOURNEY_FIRESTORE_URL: `http://${process.env.FIRESTORE_EMULATOR_HOST}`,
   });
   [code] = await once(playwright, 'exit');
 } finally {

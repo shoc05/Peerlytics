@@ -22,6 +22,12 @@ export function fakeAuth({ users = {}, tokens = {} } = {}) {
       if (!users[uid]) throw authError('auth/user-not-found');
       return { uid, customClaims: users[uid].customClaims };
     },
+    async getUserByEmail(email) {
+      const found = Object.entries(users).find(([, u]) => u.email && u.email.toLowerCase() === String(email).toLowerCase());
+      if (!found) throw authError('auth/user-not-found');
+      const [uid, u] = found;
+      return { uid, email: u.email, displayName: u.displayName, customClaims: u.customClaims };
+    },
     async setCustomUserClaims(uid, claims) {
       calls.setCustomUserClaims.push({ uid, claims });
       users[uid] = { ...users[uid], customClaims: claims };
