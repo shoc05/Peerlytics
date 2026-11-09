@@ -4,7 +4,7 @@ import { COURSE_API_METHODS, isCourseApiReady } from './courseApi.js';
 import { COURSE_TABS, parseCourseTab, tabIndexAfterKey } from './tabs.js';
 import { DEFAULT_RUBRIC, RUBRIC_CRITERIA, rubricFromPercents, toPercentInputs } from './rubric.js';
 import { buildDeadline, parseDate } from './deadline.js';
-import { errorKey, listViewState } from './viewState.js';
+import { errorKey, listViewState, projectIsOpen } from './viewState.js';
 import { normalizeJoinCode, validateJoinCode } from './joinCode.js';
 import { COURSE_STRINGS, courseText } from './strings.js';
 import { formatDate } from '../utils/workspaceHelpers.js';
@@ -23,14 +23,14 @@ test('the course site stays off without a complete course API', () => {
 
 // ── tabs ──
 test('a course has the five tabs in order', () => {
-  assert.deepEqual([...COURSE_TABS], ['overview', 'assignments', 'groups', 'members', 'grades']);
+  assert.deepEqual([...COURSE_TABS], ['projects', 'overview', 'groups', 'members', 'grades']);
 });
 
 test('unknown or missing tabs open Overview', () => {
   assert.equal(parseCourseTab('grades'), 'grades');
-  assert.equal(parseCourseTab('Grades'), 'overview');
-  assert.equal(parseCourseTab(undefined), 'overview');
-  assert.equal(parseCourseTab('settings'), 'overview');
+  assert.equal(parseCourseTab('Grades'), 'projects');
+  assert.equal(parseCourseTab(undefined), 'projects');
+  assert.equal(parseCourseTab('settings'), 'projects');
 });
 
 test('arrow keys wrap around the tablist; Home and End jump', () => {
@@ -109,6 +109,13 @@ test('a deadline needs a valid time and must be in the future', () => {
 });
 
 // ── viewState ──
+test('a project is open until its deadline', () => {
+  const now = Date.UTC(2026, 10, 6);
+  assert.equal(projectIsOpen({ deadline: '2026-11-07T00:00:00.000Z' }, now), true);
+  assert.equal(projectIsOpen({ deadline: '2026-11-05T00:00:00.000Z' }, now), false);
+  assert.equal(projectIsOpen({ deadline: '2026-11-05T00:00:00.000Z', effectiveDeadline: '2026-11-07T00:00:00.000Z' }, now), true);
+});
+
 test('API errors map to the contract codes', () => {
   assert.equal(errorKey(null), null);
   assert.equal(errorKey({ status: 409, code: 'ALREADY_ENROLLED' }), 'errorAlreadyEnrolled');

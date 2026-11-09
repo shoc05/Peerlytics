@@ -12,6 +12,7 @@
     "lint": "eslint src e2e vite-plugins playwright.config.js",
     "test": "node --test test/firebase-hosting.test.js src/**/*.test.js vite-plugins/*.test.js .github/scripts/*.test.cjs",
     "test:e2e:staging": "playwright test --project=staging",
+    "test:e2e:journeys": "firebase emulators:exec --only auth,firestore --project demo-peerlytics \"node e2e/journeys/run.mjs\"",
     "test:rules": "firebase emulators:exec --only firestore --project demo-peerlytics \"node --test test/firestore.rules.test.js\"",
     "test:auth": "firebase emulators:exec --only auth,firestore --project demo-peerlytics \"node --test backend/src/auth/auth.emulator.itest.js\"",
     "test:deadlines": "firebase emulators:exec --only firestore --project demo-peerlytics \"node --test backend/src/jobs/deadlines/deadlines.emulator.itest.js\""
@@ -38,6 +39,7 @@
     "yjs": "^13.6.33"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
     "@eslint/js": "^10.0.1",
     "@firebase/rules-unit-testing": "^4.0.1",
     "@playwright/test": "^1.56.1",

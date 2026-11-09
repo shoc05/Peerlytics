@@ -16,7 +16,13 @@ const toAnnouncement = (a) => ({ id: a.id, body: a.body, authorName: a.author?.d
 
 const toAssignment = (a) => ({ ...a, rubric: a.weights });
 
-const toGroup = (g) => ({ id: g.id, name: g.name, memberCount: g.members?.length ?? 0 });
+const toGroup = (g) => ({
+  id: g.id,
+  name: g.name,
+  memberCount: g.members?.length ?? 0,
+  memberNames: (g.members ?? []).map((m) => m.displayName),
+  submitted: Boolean(g.submittedAt),
+});
 
 const toGrade = (g, titles) => ({
   id: g.id,
@@ -62,12 +68,17 @@ export function createCourseApi(client) {
         get(path('courses', courseId, 'grades')),
       ]);
       const groupLists = await Promise.all(assignments.map((a) => get(path('assignments', a.id, 'groups'))));
+      const projects = assignments.map((a, i) => ({
+        ...toAssignment(a),
+        groups: groupLists[i].groups.map(toGroup),
+        ungroupedStudents: groupLists[i].ungroupedStudents ?? [],
+      }));
       const titles = Object.fromEntries(assignments.map((a) => [a.id, a.title]));
       return {
         ...toCourse(course, lecturerOf(members)),
         members,
         announcements: announcements.map(toAnnouncement),
-        assignments: assignments.map(toAssignment),
+        assignments: projects,
         groups: groupLists.flatMap((list) => list.groups.map(toGroup)),
         grades: grades.map((g) => toGrade(g, titles)),
       };
@@ -77,7 +88,15 @@ export function createCourseApi(client) {
       toAnnouncement(await post(path('courses', courseId, 'announcements'), announcementBody(body))),
 
     /** The form has no brief yet, and the API requires one, so the title stands in. */
-    createAssignment: async (courseId, { title, deadline, rubric, brief }) =>
-      toAssignment(await post(path('courses', courseId, 'assignments'), { title, brief: brief || title, deadline, weights: rubric })),
+    createAssignment: async (courseId, { title, deadline, rubric, brief, groupSize = null }) => ({
+      ...toAssignment(await post(path('courses', courseId, 'assignments'), { title, brief: brief || title, deadline, weights: rubric, groupSize })),
+      groups: [],
+      ungroupedStudents: [],
+    }),
+
+    /** A group and its workspace for one project. memberIds are students enrolled in the course. */
+    createGroup: (assignmentId, { name, memberIds }) => post(path('assignments', assignmentId, 'groups'), { name, memberIds }),
+
+    regenerateJoinCode: (courseId) => post(path('courses', courseId, 'join-code'), {}),
   };
 }

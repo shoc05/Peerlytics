@@ -174,6 +174,7 @@ function VersionHistoryPanel({ versions, darkMode, selectedId, onSelect }) {
 }
 
 export default function WorkspacePanel({
+  canShare = true,
   darkMode,
   currentUser,
   groupId,
@@ -1597,8 +1598,8 @@ export default function WorkspacePanel({
                   {presenceUsers.length === 0 && (
                     <span style={{ fontSize: 10, color: '#9aa0a6' }}>only you</span>
                   )}
-                  {/* Google-Docs-style Share / add member */}
-                  <button
+                  {/* Google-Docs-style Share / add member. A course workspace's people come from the course. */}
+                  {canShare && <button
                     type="button"
                     onClick={() => { setShareEmail(''); setShareRole('member'); setShowShareModal(true); }}
                     title="Add people to this workspace"
@@ -1614,7 +1615,7 @@ export default function WorkspacePanel({
                       <circle cx="9" cy="7" r="4" /><path d="M19 8v6M22 11h-6" />
                     </svg>
                     Share
-                  </button>
+                  </button>}
                 </div>
               )}
               <span style={{ marginLeft: 'auto', fontSize: 11, color: '#888' }}>

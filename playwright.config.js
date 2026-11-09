@@ -12,6 +12,18 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
   projects: [
+    // Browser journeys against emulators and a real PostgreSQL: npm run test:e2e:journeys (e2e/journeys/run.mjs).
+    {
+      name: 'journeys',
+      testDir: './e2e/journeys',
+      timeout: 120_000,
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.JOURNEY_URL,
+        trace: 'retain-on-failure',
+        screenshot: 'only-on-failure',
+      },
+    },
     {
       name: 'staging',
       testDir: './e2e/staging',
