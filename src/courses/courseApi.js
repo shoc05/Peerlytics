@@ -30,6 +30,8 @@ export const COURSE_API_METHODS = Object.freeze([
   'createCourse',
   'postAnnouncement',
   'createAssignment',
+  'createGroup',
+  'regenerateJoinCode',
 ]);
 
 /** True only when `api` provides every method the course site calls. */

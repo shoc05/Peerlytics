@@ -23,3 +23,8 @@ export function listViewState({ ready, loading, error, items }) {
   if (error) return 'error';
   return Array.isArray(items) && items.length > 0 ? 'ready' : 'empty';
 }
+
+/** A project is open until its deadline, or the student's group's extended deadline. */
+export function projectIsOpen(project, now = Date.now()) {
+  return new Date(project.effectiveDeadline ?? project.deadline).getTime() > now;
+}

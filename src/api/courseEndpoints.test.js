@@ -22,7 +22,12 @@ const responses = {
     assignments: [{ id: 'a1', title: 'Report', deadline: '2026-02-01T00:00:00.000Z', weights: { time: 0.25, edits: 0.25, writing: 0.25, tasks: 0.25 } }],
   },
   'GET /api/courses/c1/grades': { grades: [{ id: 'g1', assignmentId: 'a1', student: { displayName: 'Dorji' }, final: 8.5 }] },
-  'GET /api/assignments/a1/groups': { groups: [{ id: 'w1', name: 'Team 1', members: [{}, {}] }], ungroupedStudents: [] },
+  'GET /api/assignments/a1/groups': {
+    groups: [{ id: 'w1', name: 'Team 1', submittedAt: null, members: [{ displayName: 'Dorji' }, { displayName: 'Tashi' }] }],
+    ungroupedStudents: [{ id: 'stu-3', displayName: 'Pema' }],
+  },
+  'POST /api/assignments/a1/groups': { id: 'w2', name: 'Team 2' },
+  'POST /api/courses/c1/join-code': { joinCode: 'ZZZZ2345' },
   'POST /api/courses/c1/announcements': { id: 'n2', body: 'x', author: { displayName: 'Pema' }, createdAt: '2026-01-01T00:00:00.000Z' },
   'POST /api/courses/c1/assignments': { id: 'a2', title: 'Essay', weights: { time: 1, edits: 0, writing: 0, tasks: 0 } },
 };
@@ -73,7 +78,10 @@ test('getCourse maps every tab onto the shapes the screens render', async () => 
   assert.deepEqual(course.members[1], { uid: 'stu-1', name: 'Dorji', role: 'student' });
   assert.deepEqual(course.announcements[0], { id: 'n1', body: 'Hi all', authorName: 'Pema', createdAt: '2026-01-01T00:00:00.000Z' });
   assert.equal(course.assignments[0].rubric.time, 0.25);
-  assert.deepEqual(course.groups, [{ id: 'w1', name: 'Team 1', memberCount: 2 }]);
+  const team = { id: 'w1', name: 'Team 1', memberCount: 2, memberNames: ['Dorji', 'Tashi'], submitted: false };
+  assert.deepEqual(course.groups, [team]);
+  assert.deepEqual(course.assignments[0].groups, [team]);
+  assert.deepEqual(course.assignments[0].ungroupedStudents, [{ id: 'stu-3', displayName: 'Pema' }]);
   assert.deepEqual(course.grades, [{ id: 'g1', studentName: 'Dorji', assignmentTitle: 'Report', grade: 8.5 }]);
 });
 
@@ -90,8 +98,24 @@ test('createAssignment sends the rubric as weights, and the title as a stand-in 
   const client = stubClient();
   const rubric = { time: 1, edits: 0, writing: 0, tasks: 0 };
   const created = await createCourseApi(client).createAssignment(COURSE_ID, { title: 'Essay', deadline: '2026-03-01T00:00:00.000Z', rubric });
-  assert.deepEqual(client.calls[0].body, { title: 'Essay', brief: 'Essay', deadline: '2026-03-01T00:00:00.000Z', weights: rubric });
+  assert.deepEqual(client.calls[0].body, { title: 'Essay', brief: 'Essay', deadline: '2026-03-01T00:00:00.000Z', weights: rubric, groupSize: null });
   assert.deepEqual(created.rubric, rubric);
+});
+
+test('createAssignment sends the group size and starts with no groups', async () => {
+  const client = stubClient();
+  const rubric = { time: 1, edits: 0, writing: 0, tasks: 0 };
+  const created = await createCourseApi(client).createAssignment(COURSE_ID, { title: 'Essay', deadline: '2026-03-01T00:00:00.000Z', rubric, groupSize: 4 });
+  assert.equal(client.calls[0].body.groupSize, 4);
+  assert.deepEqual(created.groups, []);
+});
+
+test('createGroup and regenerateJoinCode call the right routes', async () => {
+  const client = stubClient();
+  const api = createCourseApi(client);
+  await api.createGroup('a1', { name: 'Team 2', memberIds: ['stu-3'] });
+  assert.deepEqual(client.calls[0], { method: 'POST', url: '/api/assignments/a1/groups', body: { name: 'Team 2', memberIds: ['stu-3'] } });
+  assert.deepEqual(await api.regenerateJoinCode(COURSE_ID), { joinCode: 'ZZZZ2345' });
 });
 
 test('a course id is escaped in the path', async () => {

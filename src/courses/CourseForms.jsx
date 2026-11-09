@@ -155,7 +155,7 @@ export function AnnouncementForm({ t, ui, onSubmit }) {
 
 export function AssignmentForm({ t, ui, onSubmit }) {
   const id = useId();
-  const empty = () => ({ title: '', date: '', time: '', weights: toPercentInputs() });
+  const empty = () => ({ groupSize: '4', title: '', date: '', time: '', weights: toPercentInputs() });
   const [values, setValues] = useState(empty);
   const [errors, setErrors] = useState({});
   const { busy, formError, run } = useSubmit(t);
@@ -174,7 +174,7 @@ export function AssignmentForm({ t, ui, onSubmit }) {
     for (const [k, v] of Object.entries(rubricErrors)) next[k] = t(v);
     setErrors(next);
     if (Object.keys(next).length) return;
-    const body = { title: values.title.trim(), deadline: deadline.toISOString(), rubric };
+    const body = { title: values.title.trim(), deadline: deadline.toISOString(), rubric, groupSize: values.groupSize ? Number(values.groupSize) : null };
     if (await run(() => onSubmit(body))) setValues(empty());
   };
 
@@ -192,6 +192,12 @@ export function AssignmentForm({ t, ui, onSubmit }) {
           <input {...describe(`${id}-time`, { error: errors.time })} className={ui.input} value={values.time} onChange={set('time')} placeholder="hh:mm" inputMode="numeric" autoComplete="off" maxLength={5} />
         </Field>
       </div>
+      <Field id={`${id}-size`} label={t('groupSize')} ui={ui}>
+        <select id={`${id}-size`} className={ui.input} value={values.groupSize} onChange={set('groupSize')}>
+          {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
+          <option value="">{t('groupSizeAny')}</option>
+        </select>
+      </Field>
       <fieldset className="m-0 p-0 border-0 grid gap-2" aria-describedby={`${id}-rubric-help ${id}-rubric-total`}>
         <legend className={`${ui.label} mb-1`}>{t('rubricWeights')}</legend>
         <p id={`${id}-rubric-help`} className={`m-0 text-xs ${ui.sub}`}>{t('rubricHelp')}</p>
@@ -207,6 +213,51 @@ export function AssignmentForm({ t, ui, onSubmit }) {
         </p>
       </fieldset>
       <FormFooter ui={ui} busy={busy} label={t('createAssignment')} busyLabel={t('creating')} formError={formError} />
+    </form>
+  );
+}
+
+/** A new group for one project: a name, and any students not yet in a group for it. */
+export function GroupForm({ t, ui, students = [], onSubmit }) {
+  const id = useId();
+  const [name, setName] = useState('');
+  const [picked, setPicked] = useState([]);
+  const [error, setError] = useState(null);
+  const { busy, formError, run } = useSubmit(t);
+
+  const toggle = (uid) => setPicked((list) => (list.includes(uid) ? list.filter((u) => u !== uid) : [...list, uid]));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      setError(t('fieldRequired'));
+      return;
+    }
+    setError(null);
+    if (await run(() => onSubmit({ name: name.trim(), memberIds: picked }))) {
+      setName('');
+      setPicked([]);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} noValidate className="grid gap-3">
+      <h4 className="m-0 text-sm font-bold">{t('addGroup')}</h4>
+      <Field id={`${id}-name`} label={t('groupName')} error={error} ui={ui}>
+        <input {...describe(`${id}-name`, { error })} className={ui.input} value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
+      </Field>
+      <fieldset className="m-0 p-0 border-0 grid gap-1.5">
+        <legend className={`${ui.label} mb-1`}>{t('groupMembers')}</legend>
+        {students.length === 0
+          ? <p className={`m-0 text-xs ${ui.sub}`}>{t('noUngrouped')}</p>
+          : students.map((s) => (
+            <label key={s.id} className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={picked.includes(s.id)} onChange={() => toggle(s.id)} />
+              {s.displayName}
+            </label>
+          ))}
+      </fieldset>
+      <FormFooter ui={ui} busy={busy} label={t('createGroup')} busyLabel={t('creating')} formError={formError} />
     </form>
   );
 }

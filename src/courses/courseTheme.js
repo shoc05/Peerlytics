@@ -25,5 +25,6 @@ export function courseTheme(darkMode) {
     noticeBadge: darkMode ? 'bg-amber-400/20 text-amber-200' : 'bg-amber-200 text-amber-900',
     error: darkMode ? 'text-rose-300' : 'text-rose-700',
     pill: darkMode ? 'bg-brand-500/15 text-brand-300' : 'bg-brand-50 text-brand-700',
+    mutedPill: darkMode ? 'bg-white/10 text-ink-100' : 'bg-slate-100 text-slate-700',
   };
 }

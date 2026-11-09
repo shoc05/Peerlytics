@@ -331,9 +331,31 @@ describe('groups and workspaces', () => {
     const asLecturer = (await call('lect', 'GET', `/assignments/${state.assignment.id}/groups`)).body;
     assert.deepEqual(asLecturer.ungroupedStudents.map((s) => s.id), ['stu-3']);
     assert.equal(asLecturer.groups[0].members[0].email, 'stu1@rub.edu.bt');
-    const asStudent = (await call('stu3', 'GET', `/assignments/${state.assignment.id}/groups`)).body;
+    const asStudent = (await call('stu1', 'GET', `/assignments/${state.assignment.id}/groups`)).body;
     assert.deepEqual(asStudent.ungroupedStudents, []);
     assert.equal('email' in asStudent.groups[0].members[0], false);
+  });
+
+  test('a student sees only their own group in a project', async () => {
+    // A project of its own, removed at the end, so the other tests' groups don't change.
+    const project = await call('lect', 'POST', `/courses/${state.course.id}/assignments`, {
+      title: 'Own-group check',
+      brief: 'Only for this test.',
+      deadline: '2099-01-01T00:00:00.000Z',
+    });
+    assert.equal(project.status, 201);
+    const path = `/assignments/${project.body.id}/groups`;
+    try {
+      assert.deepEqual((await call('stu3', 'GET', path)).body.groups, [], 'a student in no group sees none');
+      assert.equal((await call('lect', 'POST', path, { name: 'A', memberIds: ['stu-1'] })).status, 201);
+      assert.equal((await call('lect', 'POST', path, { name: 'B', memberIds: ['stu-3'] })).status, 201);
+      assert.deepEqual((await call('lect', 'GET', path)).body.groups.map((g) => g.name), ['A', 'B']);
+      assert.deepEqual((await call('stu1', 'GET', path)).body.groups.map((g) => g.name), ['A']);
+      assert.deepEqual((await call('stu3', 'GET', path)).body.groups.map((g) => g.name), ['B']);
+      assert.deepEqual((await call('stu2', 'GET', path)).body.groups, []);
+    } finally {
+      assert.equal((await call('lect', 'DELETE', `/assignments/${project.body.id}`)).status, 204);
+    }
   });
 
   test('students see their own workspaces only', async () => {

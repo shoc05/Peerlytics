@@ -223,7 +223,15 @@ export function createAssignmentRouter(ctx) {
     handler(async (req, res) => {
       const access = await assignmentAccess(db.pool, req.user, idParam(uuid, req.params.assignmentId));
       const staff = isStaff(access);
-      const groups = await loadWorkspaces(db.pool, 'w.assignment_id = $1', [access.assignment.id], { withEmail: staff });
+      // A student sees only their own group, never the others in the project.
+      const groups = staff
+        ? await loadWorkspaces(db.pool, 'w.assignment_id = $1', [access.assignment.id], { withEmail: staff })
+        : await loadWorkspaces(
+            db.pool,
+            'w.assignment_id = $1 AND EXISTS (SELECT 1 FROM workspace_members me WHERE me.workspace_id = w.id AND me.user_id = $2)',
+            [access.assignment.id, req.user.uid],
+            { withEmail: false }
+          );
       let ungroupedStudents = [];
       if (staff) {
         const { rows } = await db.pool.query(

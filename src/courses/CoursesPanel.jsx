@@ -60,7 +60,7 @@ function CourseList({ state, courses, error, isLecturer, t, ui, onOpen, onRetry 
   );
 }
 
-export default function CoursesPanel({ api = null, language = 'en', darkMode = false, isLecturer = false, pushToast = () => {} }) {
+export default function CoursesPanel({ api = null, language = 'en', darkMode = false, isLecturer = false, onOpenWorkspace = () => {}, pushToast = () => {} }) {
   const t = courseText(language);
   const ui = courseTheme(darkMode);
   const ready = isCourseApiReady(api);
@@ -93,6 +93,7 @@ export default function CoursesPanel({ api = null, language = 'en', darkMode = f
         ui={ui}
         isLecturer={isLecturer}
         pushToast={pushToast}
+        onOpenWorkspace={onOpenWorkspace}
         onBack={() => setOpenCourseId(null)}
       />
     );
@@ -114,7 +115,7 @@ export default function CoursesPanel({ api = null, language = 'en', darkMode = f
   const formProps = { t, ui, disabled: !ready, describedBy: ready ? undefined : NOTICE_ID };
 
   return (
-    <div className={`p-4 sm:p-8 overflow-auto ${ui.txt}`}>
+    <div data-testid="courses-panel" className={`p-4 sm:p-8 overflow-auto ${ui.txt}`}>
       <h1 className="m-0 mb-1.5 text-[26px] font-bold tracking-tight">{t('title')}</h1>
       <p className={`m-0 mb-5 text-[13px] ${ui.sub}`}>{isLecturer ? t('subtitleLecturer') : t('subtitleStudent')}</p>
 

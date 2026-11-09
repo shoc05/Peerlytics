@@ -187,8 +187,8 @@ Each step is one PR into `develop`, on `feature/6.<n>-<name>`. Owners are sugges
 | 6.1 | Sonam | `backend/routes`, `src/api`, `src/courses` | PR #82: 172 unit, 70 PostgreSQL | 6.1 Bring back the courses API and connect the Courses tab |
 | 6.2 | Sonam | `backend/services`, `backend/routes` | Port Sonam's 2.4 tests, PostgreSQL, OpenAI stubbed. With no API key, legacy runs and the reason is recorded | 6.2 Bring back OpenAI analysis with the legacy fallback, key added later |
 | 6.3 | Kezang | `firestore.rules`, `backend/`, `test/` | Rules emulator: non-enrolled student, other group, lecturer before submission, browser group creation refused | 6.3 Server-only workspace creation and tighter rules behind courses_v2 |
-| 6.4 | Ngawang | `src/courses`, `src/components` | Unit, Playwright: course, project, join by code, own group only; axe | 6.4 Course-first home, Projects tab, submit through the new route, and removal of New Workspace |
-| 6.5 | Sonam | `backend/routes`, `src/courses` | PostgreSQL | 6.5 Random groups and email or CSV invites |
+| 6.4 | Ngawang | `src/courses`, `src/components` | Unit, Playwright: course, project, join by code, own group only; axe | 6.4 Course-first home, Projects tab and removal of New Workspace |
+| 6.5 | Sonam | `backend/routes`, `src/courses` | PostgreSQL | 6.5 Random groups, email or CSV invites, and submit through the new route |
 | 6.6 | Sangay | `scripts/`, `backend/routes`, `src/courses` | Dry-run test, PostgreSQL, rules emulator | 6.6 Add existing workspaces to courses |
 | 6.7 | Tshewang | `backend/db/migrations`, `docs/db-schema.md`, `backend/openapi.yaml`, flags | Migrations on PostgreSQL, constraints | 6.7 Billing tables, API contract and billing_enabled |
 | 6.8 | Tshewang | `backend/src/billing` | PostgreSQL: duplicate journal by the DB, retry after rejection, wrong amount, two concurrent approvals give one subscription, renewal from current end, audit rows; lecturer and collegeAdmin can't approve; lecturer can't buy | 6.8 Payment requests, approve and reject, with manual_mbob method interface |

@@ -1,9 +1,9 @@
-// The five tabs of a course site, in display order.
-export const COURSE_TABS = Object.freeze(['overview', 'assignments', 'groups', 'members', 'grades']);
+// The five tabs of a course site, in display order. Projects come first: they're what the course is for.
+export const COURSE_TABS = Object.freeze(['projects', 'overview', 'groups', 'members', 'grades']);
 
-/** A tab id from a URL or saved state; anything unknown opens Overview. */
+/** A tab id from a URL or saved state; anything unknown opens Projects. */
 export function parseCourseTab(value) {
-  return COURSE_TABS.includes(value) ? value : 'overview';
+  return COURSE_TABS.includes(value) ? value : 'projects';
 }
 
 /**

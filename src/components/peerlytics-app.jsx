@@ -389,6 +389,17 @@ const PeerlyticsDashboard = () => {
     return unsub;
   }, [currentUser?.uid]);
 
+  // With courses_v2, Courses is the home screen and only workspaces outside a course are listed
+  // under "Older workspaces". They can't be created any more; they keep working for their members.
+  const standaloneGroups = useMemo(() => availableGroups.filter((g) => !g.courseId), [availableGroups]);
+  const listedGroups = coursesV2 ? standaloneGroups : availableGroups;
+  const homeSetRef = React.useRef(false);
+  useEffect(() => {
+    if (!coursesV2 || homeSetRef.current) return;
+    homeSetRef.current = true;
+    if (!activeWorkspaceId) setActiveTab((tab) => (tab === 'projects' ? 'courses' : tab));
+  }, [coursesV2, activeWorkspaceId]);
+
   useEffect(() => {
     if (!isLecturer || selectedGroup || !availableGroups.length) return;
     setSelectedGroup(availableGroups[0].id);
@@ -1205,14 +1216,15 @@ const PeerlyticsDashboard = () => {
       {/* MAIN LAYOUT */}
       <div style={{ display: 'flex', height: 'calc(100vh - 65px)' }}>
         {/* SIDEBAR */}
-        <aside className={`w-[220px] overflow-y-auto p-3 flex flex-col gap-1 backdrop-blur-md border-r ${
+        <aside className={`w-[60px] sm:w-[220px] flex-shrink-0 overflow-y-auto p-2 sm:p-3 flex flex-col gap-1 backdrop-blur-md border-r ${
           darkMode ? 'bg-[#202020] border-[#333333]' : 'bg-white border-slate-200 shadow-[2px_0_12px_rgba(45,74,62,0.04)]'
         }`}>
           {/* Main nav — spec: Projects · Analytics · Storage · Calendar */}
           {[
-            { id: 'projects', label: t('projects'), icon: NavIconProjects },
+            ...(coursesV2 ? [] : [{ id: 'projects', label: t('projects'), icon: NavIconProjects }]),
             // Courses (step 1.7) stays visible but marked until the course API exists.
             { id: 'courses', label: t('courses'), icon: NavIconCourses, note: coursesV2 && isCourseApiReady(courseApi) ? null : t('notAvailableYet') },
+            ...(coursesV2 && standaloneGroups.length ? [{ id: 'projects', label: 'Older workspaces', icon: NavIconProjects }] : []),
             // Analytics is not in the main nav: students don't get it at all, and for
             // lecturers it lives in "Analytics Tools" as "Analysis".
             { id: 'storage', label: t('storage'), icon: NavIconStorage },
@@ -1231,7 +1243,9 @@ const PeerlyticsDashboard = () => {
                   setActiveTab(item.id);
                   if (item.id === 'projects') { setActiveWorkspaceId(null); setOpenFile(null); }
                 }}
-                className={`group w-full px-3 py-2.5 rounded-lg text-[13px] text-left flex items-center gap-2.5 transition active:scale-[0.98] ${
+                aria-label={item.note ? `${item.label}, ${item.note}` : item.label}
+                title={item.label}
+                className={`group w-full px-3 py-2.5 rounded-lg text-[13px] text-left flex items-center justify-center sm:justify-start gap-2.5 transition active:scale-[0.98] ${
                   isActive
                     ? 'bg-brand-gradient text-white font-bold shadow-soft'
                     : darkMode
@@ -1241,14 +1255,14 @@ const PeerlyticsDashboard = () => {
               >
                 <Icon className="w-4 h-4 flex-shrink-0 transition-transform group-hover:scale-110" />
                 {item.note ? (
-                  <span className="min-w-0 leading-tight">
+                  <span className="hidden sm:inline min-w-0 leading-tight">
                     <span className="block">{item.label}</span>
                     <span className={`block text-[10px] font-semibold ${
                       isActive ? 'text-white/90' : darkMode ? 'text-amber-200' : 'text-amber-800'
                     }`}>{item.note}</span>
                   </span>
                 ) : (
-                  <span>{item.label}</span>
+                  <span className="hidden sm:inline">{item.label}</span>
                 )}
                 {unread > 0 && (
                   <span className="ml-auto bg-rose-500 text-white rounded-full text-[10px] px-2 py-0.5 font-bold ring-2 ring-rose-500/30 animate-pulse">
@@ -1262,10 +1276,10 @@ const PeerlyticsDashboard = () => {
           {/* Active workspace section */}
           {activeWorkspaceId && groupMeta && (
             <div className="mt-3">
-              <div className={`text-[10px] font-bold uppercase tracking-[0.08em] px-1 mb-1.5 ${darkMode ? 'text-ink-400' : 'text-slate-400'}`}>
+              <div className={`hidden sm:block text-[10px] font-bold uppercase tracking-[0.08em] px-1 mb-1.5 ${darkMode ? 'text-ink-400' : 'text-slate-400'}`}>
                 {t('workspace')}
               </div>
-              <div className={`px-3 py-2.5 rounded-lg border-l-[3px] border-brand-500 mb-1.5 ${
+              <div className={`hidden sm:block px-3 py-2.5 rounded-lg border-l-[3px] border-brand-500 mb-1.5 ${
                 darkMode ? 'bg-brand-500/10' : 'bg-brand-50'
               }`}>
                 <div className={`text-xs font-bold truncate ${darkMode ? 'text-ink-100' : 'text-slate-900'}`}>{groupMeta.name}</div>
@@ -1282,7 +1296,9 @@ const PeerlyticsDashboard = () => {
                     type="button"
                     disabled={item.disabled}
                     onClick={() => !item.disabled && setActiveTab(item.id)}
-                    className={`w-full px-2.5 py-2 rounded-lg text-xs text-left flex items-center gap-2 overflow-hidden transition ${
+                    aria-label={item.label}
+                    title={item.label}
+                    className={`w-full px-2.5 py-2 rounded-lg text-xs text-left flex items-center justify-center sm:justify-start gap-2 overflow-hidden transition ${
                       item.disabled
                         ? darkMode ? 'text-ink-700 cursor-default' : 'text-slate-300 cursor-default'
                         : isActive
@@ -1293,7 +1309,7 @@ const PeerlyticsDashboard = () => {
                     } active:scale-[0.98]`}
                   >
                     <Icon className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span className="truncate">{item.label}</span>
+                    <span className="hidden sm:inline truncate">{item.label}</span>
                   </button>
                 );
               })}
@@ -1303,7 +1319,7 @@ const PeerlyticsDashboard = () => {
           {/* Lecturer analytics tools */}
           {isLecturer && (
             <div className="mt-3">
-              <div className={`text-[10px] font-bold uppercase tracking-[0.08em] px-1 mb-1.5 ${darkMode ? 'text-ink-400' : 'text-slate-400'}`}>
+              <div className={`hidden sm:block text-[10px] font-bold uppercase tracking-[0.08em] px-1 mb-1.5 ${darkMode ? 'text-ink-400' : 'text-slate-400'}`}>
                 {t('analyticsTools')}
               </div>
               {[
@@ -1322,7 +1338,8 @@ const PeerlyticsDashboard = () => {
                     type="button"
                     onClick={() => !locked && setActiveTab(item.id)}
                     title={locked ? 'Open Submitted Work and select a submission' : item.label}
-                    className={`w-full px-2.5 py-2 rounded-lg text-xs text-left flex items-center gap-2 transition ${
+                    aria-label={locked ? `${item.label}, locked` : item.label}
+                    className={`w-full px-2.5 py-2 rounded-lg text-xs text-left flex items-center justify-center sm:justify-start gap-2 transition ${
                       locked
                         ? darkMode ? 'text-ink-700 cursor-not-allowed' : 'text-slate-300 cursor-not-allowed'
                         : isActive
@@ -1333,8 +1350,8 @@ const PeerlyticsDashboard = () => {
                     } active:scale-[0.98]`}
                   >
                     <Icon className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>{item.label}</span>
-                    {locked && <span className="ml-auto text-[10px] font-bold opacity-70">Locked</span>}
+                    <span className="hidden sm:inline">{item.label}</span>
+                    {locked && <span className="hidden sm:inline ml-auto text-[10px] font-bold opacity-70">Locked</span>}
                   </button>
                 );
               })}
@@ -1345,6 +1362,7 @@ const PeerlyticsDashboard = () => {
             <button
               type="button"
               onClick={() => setOfflineMode(!offlineMode)}
+              aria-label={offlineMode ? t('offline') : t('online')}
               className={`w-full px-2.5 py-2 rounded-lg text-xs text-left flex items-center gap-2 border transition active:scale-[0.98] ${
                 offlineMode
                   ? 'bg-amber-400/15 text-amber-400 border-amber-400/40'
@@ -1354,7 +1372,7 @@ const PeerlyticsDashboard = () => {
               }`}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${offlineMode ? 'bg-amber-400' : 'bg-emerald-500 animate-pulse'}`} />
-              {offlineMode ? t('offline') : t('online')}
+              <span className="hidden sm:inline">{offlineMode ? t('offline') : t('online')}</span>
             </button>
           </div>
         </aside>
@@ -2220,6 +2238,7 @@ const PeerlyticsDashboard = () => {
                 lecturerIds={groupMeta?.lecturerIds || []}
                 initialFile={openFile}
                 inlineEditor={true}
+                canShare={!groupMeta?.courseId}
                 onEditorClose={() => { setOpenFile(null); setActiveTab('drive'); }}
               />
             </div>
@@ -2248,19 +2267,19 @@ const PeerlyticsDashboard = () => {
             <div style={{ padding: 32, overflow: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, flexWrap: 'wrap', gap: 16 }}>
                 <div>
-                  <h1 style={{ margin: '0 0 6px', fontSize: 26, fontWeight: 700 }}>My Workspaces</h1>
+                  <h1 style={{ margin: '0 0 6px', fontSize: 26, fontWeight: 700 }}>{coursesV2 ? 'Older workspaces' : 'My Workspaces'}</h1>
                   <p style={{ margin: 0, fontSize: 13, color: darkMode ? '#9a9a9a' : '#666' }}>
                     {isLecturer ? 'Manage your workspaces, invite students, and review submissions.' : 'Your collaborative workspaces. Click a workspace to open its files.'}
                   </p>
                 </div>
-                <button type="button" onClick={createGroup} disabled={groupCreateLoading}
+                {!coursesV2 && <button type="button" onClick={createGroup} disabled={groupCreateLoading}
                   style={{ background: 'linear-gradient(135deg, #1D9E75 0%, #0F6E56 100%)', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: groupCreateLoading ? 'wait' : 'pointer' }}>
                   {groupCreateLoading ? 'Creating…' : '+ New Workspace'}
-                </button>
+                </button>}
               </div>
 
               {/* Create workspace form */}
-              <div style={{ background: darkMode ? 'rgba(28, 28, 28,0.6)' : '#fff', border: `1px solid ${darkMode ? '#2e2e2e' : '#e0e0e0'}`, borderRadius: 14, padding: 20, marginBottom: 28, backdropFilter: 'blur(10px)' }}>
+              {!coursesV2 && <div style={{ background: darkMode ? 'rgba(28, 28, 28,0.6)' : '#fff', border: `1px solid ${darkMode ? '#2e2e2e' : '#e0e0e0'}`, borderRadius: 14, padding: 20, marginBottom: 28, backdropFilter: 'blur(10px)' }}>
                 <h3 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 700, color: darkMode ? '#ededed' : '#222' }}>Create a new Workspace</h3>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                   <input value={groupCreateName} onChange={e => setGroupCreateName(e.target.value)}
@@ -2274,10 +2293,10 @@ const PeerlyticsDashboard = () => {
                     Create
                   </button>
                 </div>
-              </div>
+              </div>}
 
               {/* Workspace grid */}
-              {availableGroups.length === 0 ? (
+              {listedGroups.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '60px 24px', color: darkMode ? '#9a9a9a' : '#888' }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: darkMode ? '#9a9a9a' : '#888', marginBottom: 16 }}>No workspaces</div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: darkMode ? '#ededed' : '#333', marginBottom: 8 }}>No workspaces yet</div>
@@ -2285,7 +2304,7 @@ const PeerlyticsDashboard = () => {
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-                  {availableGroups.map(ws => {
+                  {listedGroups.map(ws => {
                     const isActive = activeWorkspaceId === ws.id;
                     return (
                       <div key={ws.id}
@@ -2392,6 +2411,7 @@ const PeerlyticsDashboard = () => {
           {activeTab === 'courses' && (
             <CoursesPanel
               api={coursesV2 ? courseApi : null}
+              onOpenWorkspace={openWorkspace}
               language={language}
               darkMode={darkMode}
               isLecturer={isLecturer}
